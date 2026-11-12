@@ -58,7 +58,7 @@ js/modules/domain.js          Reglas, estadísticas y validaciones conservadas
 js/modules/presentation.js    Reloj local, vínculo automático y preferencia visual
 js/storage/db.js              IndexedDB e importación conservados
 manifest.webmanifest          Instalación PWA
-sw.js                         Caché v2.2.0, solo recursos estáticos
+sw.js                         Caché v2.2.1, solo recursos estáticos
 assets/icons/                 Iconos existentes
 tests/                        Reglas, interfaz, móvil y actualización
 tests/automatic-incidents.*   Ejemplo de 120 min, justificaciones y compatibilidad
@@ -85,6 +85,7 @@ Pruebas de navegador con Playwright/Chromium como herramientas de desarrollo, no
 
 ```sh
 TEST_URL=http://localhost:8000/ node tests/browser.cjs
+TEST_URL=http://localhost:8000/ node tests/margins.cjs
 TEST_URL=http://localhost:8000/ node tests/mandatory-attendance.cjs
 TEST_URL=http://localhost:8000/ node tests/data-controls.cjs
 TEST_URL=http://localhost:8000/ node tests/automatic-incidents.cjs
@@ -110,7 +111,7 @@ La configuración de GitHub Pages no se modifica en esta entrega. Las rutas perm
 
 Para instalar en Android, abrir la URL HTTPS en Chrome y elegir «Instalar aplicación» o «Añadir a pantalla de inicio». La primera carga necesita conexión; tras activar el Service Worker, la app y la edición funcionan offline. En escritorio puede usarse o instalarse desde un navegador compatible.
 
-Al actualizar, abrir con conexión para descargar el nuevo Service Worker, cerrar todas las pestañas/ventanas de la app y volver a abrir. No se fuerza una recarga durante una edición. La caché v2.2.0 conserva juntos HTML, CSS y módulos de la versión activa y nunca contiene registros. Cambiar `VERSION`, los recursos de `SHELL` y sus identificadores `?v=` cuando corresponda en futuras versiones.
+Al actualizar, abrir con conexión para descargar el nuevo Service Worker, cerrar todas las pestañas/ventanas de la app y volver a abrir. No se fuerza una recarga durante una edición. La caché v2.2.1 conserva juntos HTML, CSS y módulos de la versión activa y nunca contiene registros. Cambiar `VERSION`, los recursos de `SHELL` y sus identificadores `?v=` cuando corresponda en futuras versiones.
 
 La instalación y los flujos se prueban en Chromium y con emulación Android; queda pendiente la comprobación de la versión 2.0 en un Android físico.
 
@@ -135,3 +136,12 @@ La programación se calcula al consultar, sin insertar jornadas vacías en Index
 El recálculo no altera horas, auditorías ni justificaciones antiguas. Los JSON siguen usando versión 1; `omissionJustified` es opcional y la doble omisión explícita es una nueva situación reconocida por esta versión. Las confirmaciones de doble omisión ya guardadas se respetan como clasificación histórica; no se exigen para las nuevas jornadas.
 
 Resultados, criterios y ejemplos: [Asistencia obligatoria](docs/ASISTENCIA-OBLIGATORIA.md).
+
+
+### Margen preventivo
+
+Resumen incluye «Margen de incidencias», calculado solo con incidencias computables: tardanzas/salidas `2 − contador` y omisiones `1 − contador`, con mínimo cero. Verde indica margen mayor a uno, ámbar exactamente uno y rojo cero. Se distingue si la próxima incidencia podría alcanzar el primer umbral o si ya se alcanzó; los descuentos son únicamente estimaciones informativas.
+
+Inicio solo advierte cuando hay riesgo inmediato en el vínculo seleccionado. Calendario muestra el aporte de la fecha a su período en la tarjeta de la jornada, sin repetir alertas en celdas. Las justificaciones, excepciones y cambios del período actualizan los márgenes usando los cálculos existentes. No se modifican reglas, datos ni respaldos.
+
+Criterios y pruebas: [Margen de incidencias](docs/MARGEN-DE-INCIDENCIAS.md).

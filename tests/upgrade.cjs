@@ -98,7 +98,7 @@ const root = require("node:path").resolve(__dirname, "..");
   await page.goto(url);
   await page.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
   await waitFor(async () =>
-    (await caches.keys()).some((k) => k.endsWith(":v2.2.0")),
+    (await caches.keys()).some((k) => k.endsWith(":v2.2.1")),
   );
   // Esperar la activación, no solo la existencia de la caché instalada.
   await waitFor(async () => {
@@ -121,7 +121,7 @@ const root = require("node:path").resolve(__dirname, "..");
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: actualización real desde etapa 1 (SW v1), CSS/JS coherentes, activación al cerrar pestaña, conservación IndexedDB y recarga offline v2.2.0.",
+    "PASS: actualización real desde etapa 1 (SW v1), CSS/JS coherentes, activación al cerrar pestaña, conservación IndexedDB y recarga offline v2.2.1.",
   );
   await browser.close();
   await new Promise((r) => server.close(r));
