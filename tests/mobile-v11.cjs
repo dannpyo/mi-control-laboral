@@ -56,11 +56,8 @@ const path = require("node:path");
     .click();
   await page.locator("[name=entry]").fill("07:30");
   await page.locator("[name=exit]").fill("18:29");
-  await page.getByText("Más opciones", { exact: true }).click();
+  await page.getByText("Justificar / excepción", { exact: true }).click();
   await page.locator("[name=earlyJustified]").check();
-  await page.locator("[name=officialEntry]").selectOption("marked");
-  await page.locator("[name=officialExit]").selectOption("marked");
-  await page.locator("[name=closed]").check();
   await page
     .getByRole("button", { name: "Guardar jornada", exact: true })
     .click();
@@ -114,8 +111,16 @@ const path = require("node:path");
           officialExit: "marked",
         },
       ],
-      ["2026-11-01", "3", { entry: "08:00", lateState: "unjustified" }],
-      ["2026-10-25", "3", { entry: "08:00", lateState: "unjustified" }],
+      [
+        "2026-11-01",
+        "3",
+        { entry: "08:00", exit: "19:00", lateState: "unjustified" },
+      ],
+      [
+        "2026-10-25",
+        "3",
+        { entry: "08:00", exit: "19:00", lateState: "unjustified" },
+      ],
     ])
       await db.saveRecord(
         { ...d.blank(date, link, c), ...extra },

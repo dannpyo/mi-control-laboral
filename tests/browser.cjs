@@ -93,14 +93,8 @@ const launch = {
   await p
     .getByRole("button", { name: "Corregir o ingresar horario", exact: true })
     .click();
-  await p.getByText("Más opciones", { exact: true }).click();
+  await p.getByText("Justificar / excepción", { exact: true }).click();
   assert.equal(await p.locator("[name=lateJustified]").isChecked(), false);
-  await p.locator("[name=officialEntry]").selectOption("marked");
-  await p.locator("[name=officialExit]").selectOption("marked");
-  await p.locator("[name=closed]").check();
-  await p
-    .locator("[name=notes]")
-    .fill("Corrección sintética <script>no ejecutar</script>");
   await p.getByRole("button", { name: "Guardar jornada", exact: true }).click();
   await p.locator("#editor").waitFor({ state: "hidden" });
   assert.equal(

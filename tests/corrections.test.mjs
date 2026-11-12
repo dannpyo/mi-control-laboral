@@ -55,7 +55,7 @@ test("excepciones y situaciones especiales visibles por vínculo y filtros indep
   assert.deepEqual(applicableLinks("2026-11-04", rows, c, "3"), []);
   assert.deepEqual(applicableLinks("2026-11-09", [], c, "1"), []);
 });
-test("leyenda: verde requiere ambas horas, cierre y estados oficiales; situaciones neutras", () => {
+test("leyenda basada en horas sin depender de cierre/confirmaciones; situaciones neutras", () => {
   assert.equal(calendarState(null, c, now), "scheduled");
   assert.equal(calendarState(make(), c, now), "review");
   assert.equal(
@@ -64,7 +64,7 @@ test("leyenda: verde requiere ambas horas, cierre y estados oficiales; situacion
       c,
       now,
     ),
-    "review",
+    "incident",
   );
   assert.equal(
     calendarState(make(undefined, undefined, complete), c, now),
@@ -76,7 +76,7 @@ test("leyenda: verde requiere ambas horas, cierre y estados oficiales; situacion
       c,
       now,
     ),
-    "review",
+    "validated",
   );
   for (const type of [
     "holiday-free",

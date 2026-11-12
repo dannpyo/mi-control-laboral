@@ -1,5 +1,6 @@
 export const TYPES = {
   normal: "Jornada habitual",
+  "double-omission": "Doble omisión",
   "holiday-free": "Feriado libre",
   "holiday-work": "Feriado trabajado",
   permission: "Permiso",
@@ -30,9 +31,9 @@ export function defaults() {
     normalTolerance: 15,
     rainTolerance: 60,
     links: [
-      { id: "1", name: "Vínculo 1", day: 3, start: "07:30", end: "19:30" },
-      { id: "2", name: "Vínculo 2", day: 4, start: "07:30", end: "19:30" },
-      { id: "3", name: "Vínculo 3", day: 0, start: "07:00", end: "19:00" },
+      { id: "1", name: "Vínculo 1 DGVS", day: 3, start: "07:30", end: "19:30" },
+      { id: "2", name: "Vínculo 2 DGVS", day: 4, start: "07:30", end: "19:30" },
+      { id: "3", name: "Vínculo 3 HGI", day: 0, start: "07:00", end: "19:00" },
     ],
   };
 }
@@ -78,7 +79,6 @@ export function assessment(r, config, now = new Date()) {
       "justified",
       "unjustified",
       "swap",
-      "pending",
     ].includes(r.type);
   const late =
     !!r.entry &&
@@ -88,7 +88,11 @@ export function assessment(r, config, now = new Date()) {
   const elapsed =
     r.date < localDate(now) ||
     (r.date === localDate(now) &&
-      now.getHours() * 60 + now.getMinutes() >= minutes(s.end));
+      now.getHours() * 60 +
+        now.getMinutes() +
+        now.getSeconds() / 60 +
+        now.getMilliseconds() / 60000 >
+        minutes(s.end));
   const countable = !future && !exempt;
   return {
     future,
@@ -102,18 +106,31 @@ export function assessment(r, config, now = new Date()) {
     earlyMinutes: countable && early ? minutes(s.end) - minutes(r.exit) : 0,
     lateCount: countable && late && r.lateState !== "justified" ? 1 : 0,
     earlyCount: countable && early && r.earlyState !== "justified" ? 1 : 0,
-    omissions:
-      countable && elapsed && r.closed
-        ? Number(r.officialEntry === "missing") +
-          Number(r.officialExit === "missing")
+    omissionDetected:
+      countable && elapsed
+        ? r.entry || r.exit
+          ? Number(!r.entry) + Number(!r.exit)
+          : r.type === "double-omission" || legacyDoubleOmission(r)
+            ? 2
+            : 0
         : 0,
-    pending:
-      !future &&
-      (r.type === "pending" ||
-        (!exempt &&
-          (!r.closed ||
-            r.officialEntry === "pending" ||
-            r.officialExit === "pending"))),
+    omissionJustified: r.omissionJustified === true,
+    omissions:
+      countable && elapsed && !r.omissionJustified
+        ? r.entry || r.exit
+          ? Number(!r.entry) + Number(!r.exit)
+          : r.type === "double-omission" || legacyDoubleOmission(r)
+            ? 2
+            : 0
+        : 0,
+    possibleAbsence:
+      countable &&
+      elapsed &&
+      !r.entry &&
+      !r.exit &&
+      r.type !== "double-omission" &&
+      !legacyDoubleOmission(r),
+    pending: false,
     workedMinutes:
       !future && r.entry && r.exit
         ? Math.max(0, minutes(r.exit) - minutes(r.entry))
@@ -129,8 +146,42 @@ export function fine(n, type) {
       ? 0
       : Math.min(5, n - 2);
 }
+function legacyDoubleOmission(r) {
+  // Una doble omisión previamente confirmada conserva su clasificación histórica.
+  return (
+    r.closed === true &&
+    r.officialEntry === "missing" &&
+    r.officialExit === "missing"
+  );
+}
+export function effectiveRecord(date, link, records, config) {
+  const saved = records.find((r) => r.date === date && r.link === link);
+  if (saved) return saved;
+  const l = config.links.find((l) => l.id === link);
+  if (date < config.startDate || l.day !== parseDate(date).getDay())
+    return null;
+  return { ...blank(date, link, config), virtual: true };
+}
+export function periodRecords(records, config, link, p) {
+  const rows = records.filter(
+    (r) => r.link === link && r.date >= p.start && r.date <= p.end,
+  );
+  const known = new Set(rows.map((r) => r.date));
+  for (
+    const cursor = parseDate(p.start);
+    localDate(cursor) <= p.end;
+    cursor.setDate(cursor.getDate() + 1)
+  ) {
+    const date = localDate(cursor);
+    if (known.has(date)) continue;
+    const row = effectiveRecord(date, link, records, config);
+    if (row) rows.push(row);
+  }
+  return rows;
+}
 // Derivados de solo lectura: no añaden campos ni migran registros de v1.0.
-export const isWork = (r) => ["normal", "holiday-work"].includes(r.type);
+export const isWork = (r) =>
+  ["normal", "holiday-work", "pending", "double-omission"].includes(r.type);
 export function applicableLinks(date, records, config, filter = "all") {
   return config.links.filter(
     (l) =>
@@ -146,21 +197,18 @@ export function calendarState(record, config, now = new Date()) {
     return !["normal", "holiday-work", "pending"].includes(record.type)
       ? "special"
       : "scheduled";
-  if (record.type === "unjustified" || a.lateCount || a.earlyCount)
-    return "incident";
-  if (record.type === "pending") return "review";
-  if (!isWork(record)) return "special";
   if (
-    record.entry &&
-    record.exit &&
-    record.closed &&
-    !a.pending &&
-    record.officialEntry === "marked" &&
-    record.officialExit === "marked"
+    record.type === "unjustified" ||
+    a.lateCount ||
+    a.earlyCount ||
+    a.omissions
   )
-    return "validated";
-  return "review";
+    return "incident";
+  if (!isWork(record)) return "special";
+  if (a.possibleAbsence || !record.entry || !record.exit) return "review";
+  return "validated";
 }
+
 export function formatMinutes(total) {
   if (!Number.isInteger(total))
     throw Error("El tiempo debe expresarse en minutos enteros");
@@ -183,6 +231,9 @@ export function stats(records, config, link, p, now = new Date()) {
     earlyDetected: 0,
     earlyJustified: 0,
     omissions: 0,
+    omissionsDetected: 0,
+    omissionsJustified: 0,
+    possibleAbsences: 0,
     pending: 0,
     personalMinutes: 0,
     scheduledMinutes: 0,
@@ -192,24 +243,24 @@ export function stats(records, config, link, p, now = new Date()) {
     unrecorded: 0,
   };
   const schedule = config.links.find((l) => l.id === link);
-  const rows = records.filter(
-    (r) => r.link === link && r.date >= p.start && r.date <= p.end,
-  );
+  const rows = periodRecords(records, config, link, p);
   const known = new Map(rows.map((r) => [r.date, r]));
   for (const r of rows) {
     const a = assessment(r, config, now);
     if (a.future) continue;
-    out.saved++;
+    out.saved += Number(!r.virtual);
     out.closed += Number(r.closed);
     out.validated += Number(calendarState(r, config, now) === "validated");
-    out.exceptional += Number(parseDate(r.date).getDay() !== schedule.day);
+    out.exceptional += Number(
+      !r.virtual && parseDate(r.date).getDay() !== schedule.day,
+    );
     if (isWork(r)) {
       if (r.entry && r.exit) {
         out.complete++;
         out.personalMinutes += a.workedMinutes;
         out.comparableMinutes +=
           minutes(r.schedule.end) - minutes(r.schedule.start);
-      } else out.incomplete++;
+      } else if (!r.virtual) out.incomplete++;
     }
     out.lateDetected += Number(a.late);
     out.lateJustified += Number(a.lateJustified);
@@ -218,6 +269,9 @@ export function stats(records, config, link, p, now = new Date()) {
     out.late += a.lateCount;
     out.early += a.earlyCount;
     out.omissions += a.omissions;
+    out.omissionsDetected += a.omissionDetected;
+    out.omissionsJustified += a.omissionJustified ? a.omissionDetected : 0;
+    out.possibleAbsences += Number(a.possibleAbsence);
     out.pending += Number(a.pending || (isWork(r) && (!r.entry || !r.exit)));
     out.absences += Number(r.type === "unjustified");
   }
@@ -232,10 +286,15 @@ export function stats(records, config, link, p, now = new Date()) {
     out.scheduled++;
     const expected = r?.schedule || schedule;
     out.scheduledMinutes += minutes(expected.end) - minutes(expected.start);
-    if (r || date < config.startDate || date > localDate(now)) continue;
+    if ((r && !r.virtual) || date < config.startDate || date > localDate(now))
+      continue;
     if (
       date === localDate(now) &&
-      now.getHours() * 60 + now.getMinutes() < minutes(expected.end)
+      now.getHours() * 60 +
+        now.getMinutes() +
+        now.getSeconds() / 60 +
+        now.getMilliseconds() / 60000 <=
+        minutes(expected.end)
     )
       continue;
     out.unrecorded++;
@@ -289,6 +348,12 @@ export function validateConfig(c) {
   });
 }
 export function validateRecord(r) {
+  if (
+    r &&
+    r.omissionJustified !== undefined &&
+    typeof r.omissionJustified !== "boolean"
+  )
+    throw Error("Justificación de omisión inválida");
   if (
     !r ||
     !validDate(r.date) ||

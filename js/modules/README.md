@@ -1,7 +1,7 @@
 # Reglas y presentación
 
-`domain.js` conserva vínculos, fechas locales, período administrativo, validaciones, valoración de jornadas y escalas informativas. No accede al DOM ni a IndexedDB. No se modifica en el rediseño v2.0.
+`domain.js` contiene vínculos, fechas locales, período administrativo, validaciones, programación obligatoria calculada, detección automática de incidencias y escalas informativas. Las filas virtuales se construyen en memoria para evaluar jornadas sin registro; no se guardan ni se exportan. Las omisiones se deducen de las horas tras superar la salida prevista; los campos administrativos anteriores se conservan como datos históricos, sin exigirlos en la interfaz.
 
-`presentation.js` contiene el formato del reloj local, selección automática del vínculo y lectura de la preferencia visual. No modifica datos laborales. La apariencia se guarda por origen fuera del formato de respaldo.
+`presentation.js` contiene el reloj local, selección automática del vínculo y preferencia visual. No modifica registros. `js/app.js` coordina las tres pestañas, el editor breve y Configuración. El cálculo de horarios no accede al DOM ni a IndexedDB. Pruebas: `node --test tests/*.test.mjs`.
 
-`js/app.js` presenta tres pestañas (Inicio, Calendario, Resumen) y Configuración desde la cabecera. Mantiene la coordinación con la capa de almacenamiento existente. Las reglas y funciones de presentación se verifican con `node --test tests/*.test.mjs`.
+Criterios y compatibilidad: `docs/ASISTENCIA-OBLIGATORIA.md`.

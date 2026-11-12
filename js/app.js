@@ -8,6 +8,8 @@ import {
   readTheme,
 } from "./modules/presentation.js";
 import {
+  effectiveRecord,
+  periodRecords,
   isWork,
   applicableLinks,
   calendarState,
@@ -84,13 +86,20 @@ const notice = (message, error = false) => {
     el.append(close);
   }
 };
-const linkName = (id) => config.links.find((l) => l.id === id).name;
+const displayName = (l) =>
+  /^Vínculo [123]$/.test(l.name)
+    ? `${l.name} ${l.id === "3" ? "HGI" : "DGVS"}`
+    : l.name;
+const linkName = (id) => displayName(config.links.find((l) => l.id === id));
+const evaluatedRecord = (date, id) =>
+  effectiveRecord(date, id, records, config);
 const recordFor = (date, id) => records.find((r) => r.id === key(date, id));
 function shortStatus(r) {
   if (!r) return "Sin registrar";
   if (r.date > localDate()) return "Programada";
   if (!isWork(r)) return TYPES[r.type];
   const a = assessment(r, config);
+  if (a.possibleAbsence) return "Posible ausencia";
   const incomplete =
     !r.entry && !r.exit
       ? "Sin registrar"
@@ -108,7 +117,9 @@ function shortStatus(r) {
       a.early
         ? `Salida anticipada · ${a.earlyMinutes} min${a.earlyJustified ? " · justificada" : ""}`
         : "",
-      a.omissions ? `${a.omissions} omisión(es) oficial(es) confirmada(s)` : "",
+      a.omissionDetected
+        ? `${a.omissionDetected} omisión(es) de marcación${a.omissionJustified ? " · justificada(s)" : ""}`
+        : "",
     ]
       .filter(Boolean)
       .join(" · ") || "Registrada"
@@ -116,14 +127,14 @@ function shortStatus(r) {
 }
 const badge = shortStatus;
 function recordCard(date, id) {
-  const r = recordFor(date, id),
+  const r = evaluatedRecord(date, id),
     l = config.links.find((l) => l.id === id),
     state = r
       ? calendarState(r, config)
       : config.holidays.includes(date)
         ? "special"
         : "scheduled";
-  return `<article class="card record-card"><div class="card-top"><h3>${esc(l.name)}</h3><button class="text-button" data-edit="${id}" data-date="${date}">Editar</button></div><div class="record-times"><span>Entrada <strong>${r?.entry || "—"}</strong></span><span>Salida <strong>${r?.exit || "—"}</strong></span></div><p class="status ${state}">${esc(r ? shortStatus(r) : config.holidays.includes(date) ? "Feriado libre" : "Sin registrar")}</p>${l.day !== parseDate(date).getDay() ? '<span class="muted">Jornada excepcional</span>' : ""}</article>`;
+  return `<article class="card record-card"><div class="card-top"><h3>${esc(displayName(l))}</h3><button class="text-button" data-edit="${id}" data-date="${date}">Editar</button></div><div class="record-times"><span>Entrada <strong>${r?.entry || "—"}</strong></span><span>Salida <strong>${r?.exit || "—"}</strong></span></div><p class="status ${state}">${esc(r ? shortStatus(r) : config.holidays.includes(date) ? "Feriado libre" : "Sin registrar")}</p>${l.day !== parseDate(date).getDay() ? '<span class="muted">Jornada excepcional</span>' : ""}</article>`;
 }
 function currentHomeLink() {
   return (
@@ -136,7 +147,7 @@ function currentHomeLink() {
 const incidenceRows = (s) => [
   ["Tardanzas", s.late, "late"],
   ["Salidas anticipadas", s.early, "early"],
-  ["Omisiones oficiales", s.omissions, "omission"],
+  ["Omisiones de marcación", s.omissions, "omission"],
 ];
 function counterGrid(s) {
   return `<div class="incidence-grid">${incidenceRows(s)
@@ -156,7 +167,7 @@ function home() {
   const today = localDate(),
     id = currentHomeLink(),
     l = config.links.find((l) => l.id === id),
-    r = l && recordFor(today, id),
+    r = l && evaluatedRecord(today, id),
     schedule = r?.schedule || l,
     p = period(today);
   const s = l ? stats(records, config, id, p) : null;
@@ -174,7 +185,7 @@ function home() {
     .slice(0, 5);
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   return `<div class="page-heading"><h1>Inicio</h1><span>${new Date().toLocaleDateString("es-PY", { weekday: "short", day: "numeric", month: "short" })}</span></div>
-    <section class="card punch-card"><div class="card-top"><span class="eyebrow">TU JORNADA</span><span class="personal-label">Registro personal</span></div><label class="sr-only" for="quick-link">Vínculo de hoy</label><select id="quick-link"><option value="">Elegir vínculo</option>${config.links.map((link) => `<option value="${link.id}" ${link.id === id ? "selected" : ""}>${esc(link.name)}${link.day !== new Date().getDay() ? " · excepcional" : ""}</option>`).join("")}</select>
+    <section class="card punch-card"><div class="card-top"><span class="eyebrow">TU JORNADA</span><span class="personal-label">Registro personal</span></div><label class="sr-only" for="quick-link">Vínculo de hoy</label><select id="quick-link"><option value="">Elegir vínculo</option>${config.links.map((link) => `<option value="${link.id}" ${link.id === id ? "selected" : ""}>${esc(displayName(link))}${link.day !== new Date().getDay() ? " · excepcional" : ""}</option>`).join("")}</select>
     <p class="schedule">${l ? `${schedule.start} — ${schedule.end}${l.day !== new Date().getDay() ? " · Excepcional" : ""}` : "Sin jornada programada para hoy"}</p>
     <time id="live-clock" class="digital-clock" aria-label="Hora local del dispositivo">${clockText()}</time><p class="timezone">${zone === EXPECTED_ZONE ? EXPECTED_ZONE : `${esc(zone)} · prevista ${EXPECTED_ZONE}`}</p>
     <div class="punch-times"><div><span>Entrada</span><strong id="saved-entry">${r?.entry || "— — : — —"}</strong></div><div><span>Salida</span><strong id="saved-exit">${r?.exit || "— — : — —"}</strong></div></div>
@@ -192,12 +203,12 @@ function calendar() {
     const date = `${month}-${String(n).padStart(2, "0")}`;
     const links = linksForDate(date);
     const descriptions = links.map((l) => {
-      const r = recordFor(date, l.id);
+      const r = evaluatedRecord(date, l.id);
       return `${l.name}: ${r ? badge(r) : config.holidays.includes(date) ? "Feriado libre" : "Programada sin registro"}`;
     });
     const markers = links
       .map((l) => {
-        const r = recordFor(date, l.id),
+        const r = evaluatedRecord(date, l.id),
           state = r
             ? calendarState(r, config)
             : config.holidays.includes(date)
@@ -211,17 +222,17 @@ function calendar() {
     );
   }
   const selected = linksForDate(selectedDate);
-  return `<h1>Calendario</h1><div class="filters"><label>Mes<input type="month" id="month" value="${month}" required></label><label>Vínculo del calendario<select id="calendar-link"><option value="all">Todos</option>${config.links.map((l) => `<option value="${l.id}" ${calendarLink === l.id ? "selected" : ""}>${esc(l.name)}</option>`).join("")}</select></label></div>
+  return `<h1>Calendario</h1><div class="filters"><label>Mes<input type="month" id="month" value="${month}" required></label><label>Vínculo del calendario<select id="calendar-link"><option value="all">Todos</option>${config.links.map((l) => `<option value="${l.id}" ${calendarLink === l.id ? "selected" : ""}>${esc(displayName(l))}</option>`).join("")}</select></label></div>
     <div class="calendar-legend" aria-label="Leyenda"><span class="validated">Correcto</span><span class="review">Pendiente</span><span class="incident">Incidencia</span><span class="scheduled">Programada</span><span class="special">Especial</span></div>
 
     <div class="calendar">${days.map((d) => `<span class="weekday">${d.slice(0, 2)}</span>`).join("")}${cells.join("")}</div>
     <h2>${dateLabel(selectedDate)}</h2>${config.holidays.includes(selectedDate) ? '<p class="special-date">Feriado: libre salvo excepción registrada.</p>' : ""}
     ${selected.length ? selected.map((l) => recordCard(selectedDate, l.id)).join("") : '<p class="empty">Sin jornada programada ni excepcional para esta selección.</p>'}
     <button id="exceptional" class="secondary">Registrar jornada excepcional</button>
-    <div id="exceptional-picker" hidden><label>Vínculo para esta fecha<select id="exceptional-link">${config.links.map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join("")}</select></label><button id="open-exceptional">Abrir jornada seleccionada</button><p class="muted">Solo se guarda esta fecha; no cambia la programación permanente.</p></div>`;
+    <div id="exceptional-picker" hidden><label>Vínculo para esta fecha<select id="exceptional-link">${config.links.map((l) => `<option value="${l.id}">${esc(displayName(l))}</option>`).join("")}</select></label><button id="open-exceptional">Abrir jornada seleccionada</button><p class="muted">Solo se guarda esta fecha; no cambia la programación permanente.</p></div>`;
 }
 function filters() {
-  return `<div class="filters"><label>Fecha del período<input type="date" id="filter-date" value="${filterDate}" required></label><label>Vínculo<select id="filter-link"><option value="all">Todos</option>${config.links.map((l) => `<option value="${l.id}" ${l.id === filterLink ? "selected" : ""}>${esc(l.name)}</option>`).join("")}</select></label></div>`;
+  return `<div class="filters"><label>Fecha del período<input type="date" id="filter-date" value="${filterDate}" required></label><label>Vínculo<select id="filter-link"><option value="all">Todos</option>${config.links.map((l) => `<option value="${l.id}" ${l.id === filterLink ? "selected" : ""}>${esc(displayName(l))}</option>`).join("")}</select></label></div>`;
 }
 function summary() {
   const p = period(filterDate);
@@ -233,27 +244,24 @@ function summary() {
         sanctions = rows
           .map(([label, n, type]) => sanctionText(label, n, type))
           .filter(Boolean);
-      const incidents = records
-        .filter(
-          (r) =>
-            r.link === l.id &&
-            r.date >= p.start &&
-            r.date <= p.end &&
-            r.date <= localDate(),
-        )
+      const incidents = periodRecords(records, config, l.id, p)
+        .filter((r) => r.date <= localDate())
         .map((r) => ({ r, a: assessment(r, config) }))
-        .filter(({ a }) => a.late || a.early || a.omissions)
+        .filter(
+          ({ a }) =>
+            a.late || a.early || a.omissionDetected || a.possibleAbsence,
+        )
         .sort((a, b) => b.r.date.localeCompare(a.r.date));
-      return `<article class="card summary-card" data-summary-link="${l.id}"><h2>${esc(l.name)}</h2>${counterGrid(s)}<p class="omission-balance">Omisión permitida: <strong>${Math.max(0, 1 - s.omissions)}/1 disponible</strong></p>
+      return `<article class="card summary-card" data-summary-link="${l.id}"><h2>${esc(displayName(l))}</h2>${counterGrid(s)}<p class="muted">Posibles ausencias: <strong>${s.possibleAbsences}</strong></p><p class="omission-balance">Omisión permitida: <strong>${Math.max(0, 1 - s.omissions)}/1 disponible</strong></p>
       ${sanctions.length ? sanctions.map((text) => `<p class="compact-alert sanction">${esc(text)}</p>`).join("") : '<p class="no-sanction">Sin sanciones estimadas</p>'}
       ${!sanctions.length && rows.some(([, n]) => n >= 2) ? '<p class="compact-alert preventive">Segunda incidencia · alerta preventiva</p>' : ""}
-      <details><summary>Ver fechas de incidencia${incidents.length ? ` (${incidents.length})` : ""}</summary><p class="muted">Llegadas tardías: ${s.lateDetected} detectadas · ${s.lateJustified} justificadas · ${s.late} computables.<br>Salidas anticipadas: ${s.earlyDetected} detectadas · ${s.earlyJustified} justificadas · ${s.early} computables.</p>${incidents.length ? `<ul class="incident-dates">${incidents.map(({ r, a }) => `<li><button class="text-button" data-edit="${r.link}" data-date="${r.date}">${dateLabel(r.date)} · ${[a.late ? `Llegada tardía · ${a.lateMinutes} min${a.lateJustified ? " · justificada" : ""}` : "", a.early ? `Salida anticipada · ${a.earlyMinutes} min${a.earlyJustified ? " · justificada" : ""}` : "", a.omissions ? `${a.omissions} omisión(es) oficial(es)` : ""].filter(Boolean).join(" · ")}</button></li>`).join("")}</ul>` : '<p class="muted">No hay incidencias detectadas en este período.</p>'}</details></article>`;
+      <details><summary>Ver fechas de incidencia${incidents.length ? ` (${incidents.length})` : ""}</summary><p class="muted">Llegadas tardías: ${s.lateDetected} detectadas · ${s.lateJustified} justificadas · ${s.late} computables.<br>Salidas anticipadas: ${s.earlyDetected} detectadas · ${s.earlyJustified} justificadas · ${s.early} computables.<br>Omisiones: ${s.omissionsDetected} detectadas · ${s.omissionsJustified} justificadas · ${s.omissions} computables.</p>${incidents.length ? `<ul class="incident-dates">${incidents.map(({ r, a }) => `<li><button class="text-button" data-edit="${r.link}" data-date="${r.date}">${dateLabel(r.date)} · ${[a.late ? `Llegada tardía · ${a.lateMinutes} min${a.lateJustified ? " · justificada" : ""}` : "", a.early ? `Salida anticipada · ${a.earlyMinutes} min${a.earlyJustified ? " · justificada" : ""}` : "", a.omissionDetected ? `${a.omissionDetected} omisión(es)${a.omissionJustified ? " · justificada(s)" : ""}` : "", a.possibleAbsence ? "Posible ausencia" : ""].filter(Boolean).join(" · ")}</button></li>`).join("")}</ul>` : '<p class="muted">No hay incidencias detectadas en este período.</p>'}</details></article>`;
     })
     .join("");
   return `<h1>Resumen</h1><div class="period-picker"><button id="period-prev" class="secondary" aria-label="Período anterior">‹</button><div><span>Período administrativo</span><strong>${dateLabel(p.start)} – ${dateLabel(p.end)}</strong></div><button id="period-next" class="secondary" aria-label="Período siguiente">›</button></div>${filters()}${cards}<p class="regulation-note">Normativa informativa configurada por el usuario, pendiente de verificación institucional. No constituye una decisión disciplinaria oficial.</p>`;
 }
 function settings() {
-  return `<h1>Configuración</h1><form id="settings-form"><details class="card settings-group"><summary>Horarios e inicio del seguimiento</summary><p class="muted">Cambios aplicables a jornadas nuevas. Los registros existentes conservan su horario y tolerancia.</p><label>Inicio del seguimiento<input name="startDate" type="date" value="${config.startDate}" required aria-describedby="tracking-help"></label><p id="tracking-help" class="muted">Desde esta fecha se señalan jornadas programadas transcurridas sin registro para revisión. No genera faltas retroactivas, no cambia tus registros ni los períodos anteriores. Puedes cargar jornadas históricas manualmente: se cuentan solo en su período. La programación del período se muestra completa, incluso antes del seguimiento.</p>${config.links.map((l) => `<fieldset><legend>${esc(l.name)}</legend><label>Nombre<input name="name${l.id}" maxlength="80" value="${esc(l.name)}" required></label><label>Día<select name="day${l.id}">${days.map((d, i) => `<option value="${i}" ${l.day === i ? "selected" : ""}>${d}</option>`).join("")}</select></label><div class="filters"><label>Entrada<input type="time" name="start${l.id}" value="${l.start}" required></label><label>Salida<input type="time" name="end${l.id}" value="${l.end}" required></label></div></fieldset>`).join("")}</details><details class="card settings-group"><summary>Tolerancias</summary><label>Normal (minutos)<input type="number" name="normalTolerance" min="0" max="180" value="${config.normalTolerance}" required></label><label>Lluvia: total de minutos, no adicional<input type="number" name="rainTolerance" min="0" max="180" value="${config.rainTolerance}" required></label></details><details class="card settings-group"><summary>Feriados</summary><p>No se descarga un calendario externo. Introduce las fechas oficiales que correspondan. Son libres por defecto para los tres vínculos. En el calendario puedes cambiar una fecha y vínculo a «Feriado trabajado» u otra situación. Los registros ya guardados son excepciones y se conservan.</p><label>Fechas, una por línea (AAAA-MM-DD)<textarea name="holidays" rows="5" placeholder="2026-12-25">${esc(config.holidays.join("\n"))}</textarea></label></details><button type="submit">Guardar configuración</button></form><details class="card settings-group"><summary>Reglas de incidencia</summary><p class="muted">Configuración informativa pendiente de verificación institucional.</p><p>Una omisión oficial de entrada o salida permitida por vínculo y período. Solo se cuentan omisiones confirmadas en una jornada cerrada, una vez transcurrido su horario de salida.</p><p>Omisiones: 0–1 → 0 días; 2 → 1; 3 → 2; 4 → 3; 5 → 4; más de 5 → revisión normativa.</p><p>Tardanzas y salidas anticipadas, cada tipo por separado: 0–2 → 0 días; 3 → 1; 4 → 2; 5 → 3; 6 → 4; 7 o más → 5 días.</p><p>Las incidencias detectadas cuentan automáticamente salvo que marques su casilla de justificación. Una jornada sin marcaciones no se convierte en ausencia injustificada. Las jornadas futuras no suman incidencias. La ausencia injustificada se identifica, sin inventar una escala de sanción adicional.</p></details><section class="card"><h2>Datos y respaldos</h2>${backupControls()}</section>`;
+  return `<h1>Configuración</h1><form id="settings-form"><details class="card settings-group"><summary>Horarios e inicio del seguimiento</summary><p class="muted">Cambios aplicables a jornadas nuevas. Los registros existentes conservan su horario y tolerancia.</p><label>Inicio del seguimiento<input name="startDate" type="date" value="${config.startDate}" required aria-describedby="tracking-help"></label><p id="tracking-help" class="muted">Desde esta fecha se señalan jornadas programadas transcurridas sin registro para revisión. No genera faltas retroactivas, no cambia tus registros ni los períodos anteriores. Puedes cargar jornadas históricas manualmente: se cuentan solo en su período. La programación del período se muestra completa, incluso antes del seguimiento.</p>${config.links.map((l) => `<fieldset><legend>${esc(displayName(l))}</legend><label>Nombre<input name="name${l.id}" maxlength="80" value="${esc(displayName(l))}" required></label><label>Día<select name="day${l.id}">${days.map((d, i) => `<option value="${i}" ${l.day === i ? "selected" : ""}>${d}</option>`).join("")}</select></label><div class="filters"><label>Entrada<input type="time" name="start${l.id}" value="${l.start}" required></label><label>Salida<input type="time" name="end${l.id}" value="${l.end}" required></label></div></fieldset>`).join("")}</details><details class="card settings-group"><summary>Tolerancias</summary><label>Normal (minutos)<input type="number" name="normalTolerance" min="0" max="180" value="${config.normalTolerance}" required></label><label>Lluvia: total de minutos, no adicional<input type="number" name="rainTolerance" min="0" max="180" value="${config.rainTolerance}" required></label></details><details class="card settings-group"><summary>Feriados</summary><p>No se descarga un calendario externo. Introduce las fechas oficiales que correspondan. Son libres por defecto para los tres vínculos. En el calendario puedes cambiar una fecha y vínculo a «Feriado trabajado» u otra situación. Los registros ya guardados son excepciones y se conservan.</p><label>Fechas, una por línea (AAAA-MM-DD)<textarea name="holidays" rows="5" placeholder="2026-12-25">${esc(config.holidays.join("\n"))}</textarea></label></details><button type="submit">Guardar configuración</button></form><details class="card settings-group"><summary>Reglas de incidencia</summary><p class="muted">Configuración informativa pendiente de verificación institucional.</p><p>Una omisión permitida por vínculo y período. Después de superar la salida prevista, una única marcación genera una omisión automáticamente. Sin marcaciones se muestra Posible ausencia hasta clasificarla.</p><p>Omisiones: 0–1 → 0 días; 2 → 1; 3 → 2; 4 → 3; 5 → 4; más de 5 → revisión normativa.</p><p>Tardanzas y salidas anticipadas, cada tipo por separado: 0–2 → 0 días; 3 → 1; 4 → 2; 5 → 3; 6 → 4; 7 o más → 5 días.</p><p>Las incidencias detectadas cuentan automáticamente salvo que marques su casilla de justificación. Una jornada sin marcaciones no se convierte en ausencia injustificada. Las jornadas futuras no suman incidencias. La ausencia injustificada se identifica, sin inventar una escala de sanción adicional.</p></details><section class="card"><h2>Datos y respaldos</h2>${backupControls()}</section>`;
 }
 function render() {
   $("#view").innerHTML = { home, calendar, summary, settings }[section]();
@@ -431,11 +439,10 @@ async function mark(field) {
       "justified",
       "unjustified",
       "swap",
-      "pending",
     ].includes(r.type)
   )
     throw Error(
-      "Esta jornada está exenta o pendiente. Edita primero su situación (por ejemplo, Feriado trabajado).",
+      "Esta jornada tiene una excepción de asistencia. Edita primero su situación (por ejemplo, Feriado trabajado).",
     );
   r[field] = new Date().toTimeString().slice(0, 5);
   await saveRecord(
@@ -448,70 +455,47 @@ async function mark(field) {
   render();
   notice("Marcación personal guardada. No modifica el reloj biométrico.");
 }
-const stateOptions = (value) =>
-  [
-    ["pending", "Pendiente de confirmar"],
-    ["marked", "Marcación oficial realizada"],
-    ["missing", "Omisión oficial confirmada"],
-  ]
-    .map(
-      ([v, label]) =>
-        `<option value="${v}" ${v === value ? "selected" : ""}>${label}</option>`,
-    )
-    .join("");
+function legacyDoubleReset(r, type) {
+  return (
+    isWork(r) &&
+    !r.entry &&
+    !r.exit &&
+    r.closed &&
+    r.officialEntry === "missing" &&
+    r.officialExit === "missing" &&
+    type !== "double-omission"
+  );
+}
 function openEditor(date, id) {
   const existing = recordFor(date, id);
   editing = existing ? structuredClone(existing) : blank(date, id, config);
   const r = editing;
+  const selectedType =
+    isWork(r) &&
+    !r.entry &&
+    !r.exit &&
+    r.closed &&
+    r.officialEntry === "missing" &&
+    r.officialExit === "missing"
+      ? "double-omission"
+      : r.type;
   $("#editor-content").innerHTML =
     `<div class="card-top"><h2 id="editor-title">Editar marcación</h2><button type="button" id="cancel-edit" class="icon-button" aria-label="Cerrar editor">×</button></div><p class="muted">Registro personal · ${esc(linkName(id))}</p>
-    <div class="filters"><label>Fecha<input type="date" id="edit-date" value="${date}" required></label><label>Vínculo<select id="edit-link">${config.links.map((l) => `<option value="${l.id}" ${l.id === id ? "selected" : ""}>${esc(l.name)}</option>`).join("")}</select></label></div>
+    <div class="filters"><label>Fecha<input type="date" id="edit-date" value="${date}" required></label><label>Vínculo<select id="edit-link">${config.links.map((l) => `<option value="${l.id}" ${l.id === id ? "selected" : ""}>${esc(displayName(l))}</option>`).join("")}</select></label></div>
     <div class="filters"><label>Entrada personal<input type="time" name="entry" value="${r.entry}"></label><label>Salida personal<input type="time" name="exit" value="${r.exit}"></label></div>
-    <details id="more-options"><summary>Más opciones</summary>
-    <label>Situación<select name="type">${Object.entries(TYPES)
-      .map(
-        ([value, label]) =>
-          `<option value="${value}" ${value === r.type ? "selected" : ""}>${label}</option>`,
-      )
-      .join("")}</select></label>
-    <label class="check"><input name="rain" type="checkbox" ${r.rain ? "checked" : ""}>Lluvia · ${r.schedule.rainTolerance} min totales</label>
-    <label id="late-justification" class="check" hidden><input name="lateJustified" type="checkbox" ${r.lateState === "justified" ? "checked" : ""}>Llegada tardía justificada</label><label id="early-justification" class="check" hidden><input name="earlyJustified" type="checkbox" ${r.earlyState === "justified" ? "checked" : ""}>Salida anticipada justificada</label>
-    <fieldset><legend>Marcación oficial</legend><label>Entrada oficial<select name="officialEntry">${stateOptions(r.officialEntry, true)}</select></label><label>Salida oficial<select name="officialExit">${stateOptions(r.officialExit, true)}</select></label><label class="check"><input name="closed" type="checkbox" ${r.closed ? "checked" : ""}>Jornada revisada / cerrada</label></fieldset>
-    <details><summary>Horario de esta jornada</summary><div class="filters"><label>Inicio previsto<input type="time" name="scheduleStart" value="${r.schedule.start}" required></label><label>Fin previsto<input type="time" name="scheduleEnd" value="${r.schedule.end}" required></label></div><p class="muted">Tolerancia normal: ${r.schedule.normalTolerance} min.</p></details>
-    <label>Observaciones<textarea name="notes" maxlength="10000" rows="3">${esc(r.notes)}</textarea></label>
-    <details><summary>Historial de modificaciones (${r.history.length})</summary>${
-      r.history
-        .slice()
-        .reverse()
+    <details id="more-options"><summary>Justificar / excepción</summary>
+      <label>Situación<select name="type">${Object.entries(TYPES)
+        .filter(([value]) => value !== "pending")
         .map(
-          (h) =>
-            `<article class="audit"><strong>${esc(new Date(h.at).toLocaleString("es-PY"))} · ${esc(h.action)}</strong><pre>${esc(JSON.stringify({ antes: h.before, despues: h.after }, null, 2))}</pre></article>`,
+          ([value, label]) =>
+            `<option value="${value}" ${value === (selectedType === "pending" ? "normal" : selectedType) ? "selected" : ""}>${value === "normal" ? "Sin excepción" : label}</option>`,
         )
-        .join("") || "<p>Sin modificaciones.</p>"
-    }</details></details>
-    <p class="editor-hint muted">Las incidencias se cuentan automáticamente salvo justificación en Más opciones. Cambiar fecha o vínculo abre otro registro; guarda antes de cambiar.</p><p id="editor-status" role="alert" hidden></p><button class="save-button" type="submit">Guardar jornada</button>`;
-  // Vista previa local: reacciona a horas, lluvia y horario, sin guardar ni alterar historial.
-  function updateJustificationVisibility() {
-    const form = new FormData($("#record-form"));
-    const preview = {
-      ...editing,
-      entry: form.get("entry"),
-      exit: form.get("exit"),
-      rain: form.has("rain"),
-      type: form.get("type"),
-      schedule: {
-        ...editing.schedule,
-        start: form.get("scheduleStart"),
-        end: form.get("scheduleEnd"),
-      },
-    };
-    const a = assessment(preview, config);
-    $("#late-justification").hidden = !a.late;
-    $("#early-justification").hidden = !a.early;
-  }
-  $("#record-form").oninput = updateJustificationVisibility;
-  $("#record-form").onchange = updateJustificationVisibility;
-  updateJustificationVisibility();
+        .join("")}</select></label>
+      <label class="check"><input type="checkbox" name="lateJustified" ${r.lateState === "justified" ? "checked" : ""}>Llegada tardía justificada</label>
+      <label class="check"><input type="checkbox" name="earlyJustified" ${r.earlyState === "justified" ? "checked" : ""}>Salida anticipada justificada</label>
+      <label class="check"><input type="checkbox" name="omissionJustified" ${r.omissionJustified ? "checked" : ""}>Omisión justificada</label>
+      <label class="check"><input type="checkbox" name="rain" ${r.rain ? "checked" : ""}>Lluvia · ${r.schedule.rainTolerance} min totales</label>
+    </details><p id="editor-status" role="alert" hidden></p><button class="save-button" type="submit">Guardar jornada</button>`;
   $("#edit-date").onchange = (e) => {
     if (e.target.value) openEditor(e.target.value, $("#edit-link").value);
   };
@@ -530,17 +514,12 @@ $("#record-form").addEventListener("submit", (e) => {
         entry: f.get("entry"),
         exit: f.get("exit"),
         rain: f.has("rain"),
-        closed: f.has("closed"),
         lateState: f.has("lateJustified") ? "justified" : "unjustified",
         earlyState: f.has("earlyJustified") ? "justified" : "unjustified",
-        officialEntry: f.get("officialEntry"),
-        officialExit: f.get("officialExit"),
-        notes: f.get("notes"),
-        schedule: {
-          ...editing.schedule,
-          start: f.get("scheduleStart"),
-          end: f.get("scheduleEnd"),
-        },
+        omissionJustified: f.has("omissionJustified"),
+        ...(legacyDoubleReset(editing, f.get("type"))
+          ? { officialEntry: "pending", officialExit: "pending", closed: false }
+          : {}),
       };
     validateRecord(r);
     await saveRecord(
@@ -702,10 +681,38 @@ window.addEventListener("focus", () => {
       render();
     });
 });
+function attendancePhase() {
+  if (!config) return "";
+  const now = new Date(),
+    minute =
+      now.getHours() * 60 +
+      now.getMinutes() +
+      now.getSeconds() / 60 +
+      now.getMilliseconds() / 60000;
+  return [
+    ...config.links.map((l) => l.end),
+    ...records.filter((r) => r.date === localDate()).map((r) => r.schedule.end),
+  ]
+    .map((end) =>
+      minute > Number(end.slice(0, 2)) * 60 + Number(end.slice(3)) ? "1" : "0",
+    )
+    .join("");
+}
+let lastPhase = "";
 let lastDay = localDate();
 setInterval(() => {
   const clock = $("#live-clock");
   if (clock) clock.textContent = clockText();
+  const phase = attendancePhase();
+  if (
+    phase !== lastPhase &&
+    !busy &&
+    !$("#editor").open &&
+    section !== "settings"
+  ) {
+    lastPhase = phase;
+    if (config) render();
+  }
   const today = localDate();
   if (
     today !== lastDay &&

@@ -23,18 +23,18 @@ const assert = require("node:assert/strict");
   await p
     .getByRole("button", { name: "Corregir o ingresar horario", exact: true })
     .click();
-  await p.getByText("Más opciones", { exact: true }).click();
+  await p.getByText("Justificar / excepción", { exact: true }).click();
   assert.equal(
     await p
       .getByText("Llegada tardía justificada", { exact: true })
       .isVisible(),
-    false,
+    true,
   );
   assert.equal(
     await p
       .getByText("Salida anticipada justificada", { exact: true })
       .isVisible(),
-    false,
+    true,
   );
   assert.equal(
     await p.locator("select[name=lateState],select[name=earlyState]").count(),
@@ -53,7 +53,7 @@ const assert = require("node:assert/strict");
     await p
       .getByText("Salida anticipada justificada", { exact: true })
       .isVisible(),
-    false,
+    true,
   );
   await p.getByRole("button", { name: "Guardar jornada", exact: true }).click();
   await p.locator("#editor").waitFor({ state: "hidden" });
@@ -86,7 +86,7 @@ const assert = require("node:assert/strict");
   );
   assert.match(await card.locator(".incident-dates").innerText(), /120 min/);
   await card.locator("[data-edit]").click();
-  await p.getByText("Más opciones", { exact: true }).click();
+  await p.getByText("Justificar / excepción", { exact: true }).click();
   await p.locator("[name=lateJustified]").check();
   await p.getByRole("button", { name: "Guardar jornada", exact: true }).click();
   await p.locator("#editor").waitFor({ state: "hidden" });
@@ -104,7 +104,7 @@ const assert = require("node:assert/strict");
     /Llegada tardía.*120 min.*justificada/,
   );
   await card.locator("[data-edit]").click();
-  await p.getByText("Más opciones", { exact: true }).click();
+  await p.getByText("Justificar / excepción", { exact: true }).click();
   assert.equal(await p.locator("[name=lateJustified]").isChecked(), true);
   await p.locator("[name=lateJustified]").uncheck();
   await p.locator("[name=exit]").fill("19:00");
@@ -121,7 +121,7 @@ const assert = require("node:assert/strict");
   );
   await card.locator("summary").click();
   await card.locator("[data-edit]").click();
-  await p.getByText("Más opciones", { exact: true }).click();
+  await p.getByText("Justificar / excepción", { exact: true }).click();
   await p.locator("[name=earlyJustified]").check();
   await p.getByRole("button", { name: "Guardar jornada", exact: true }).click();
   await p.locator("#editor").waitFor({ state: "hidden" });
@@ -136,10 +136,10 @@ const assert = require("node:assert/strict");
   );
   // Visibilidad responde a lluvia y límites sin escribir cambios al mover controles.
   await card.locator("[data-edit]").click();
-  await p.getByText("Más opciones", { exact: true }).click();
+  await p.getByText("Justificar / excepción", { exact: true }).click();
   await p.locator("[name=entry]").fill("08:30");
   await p.locator("[name=rain]").check();
-  assert.equal(await p.locator("[name=lateJustified]").isVisible(), false);
+  assert.equal(await p.locator("[name=lateJustified]").isVisible(), true);
   await p.locator("[name=entry]").fill("08:31");
   assert.equal(await p.locator("[name=lateJustified]").isVisible(), true);
   await p.getByRole("button", { name: "Cerrar editor", exact: true }).click();
@@ -165,7 +165,7 @@ const assert = require("node:assert/strict");
   await p.locator("#editor").waitFor({ state: "hidden" });
   assert.equal(
     await p.locator(".record-card .status").innerText(),
-    "Sin registrar",
+    "Posible ausencia",
   );
   await p.getByRole("button", { name: "Editar", exact: true }).click();
   await p.locator("[name=entry]").fill("07:30");
@@ -173,7 +173,7 @@ const assert = require("node:assert/strict");
   await p.locator("#editor").waitFor({ state: "hidden" });
   assert.equal(
     await p.locator(".record-card .status").innerText(),
-    "Falta salida",
+    "Falta salida · 1 omisión(es) de marcación",
   );
   await p.getByRole("button", { name: "Editar", exact: true }).click();
   await p.locator("[name=entry]").fill("");
@@ -182,7 +182,7 @@ const assert = require("node:assert/strict");
   await p.locator("#editor").waitFor({ state: "hidden" });
   assert.equal(
     await p.locator(".record-card .status").innerText(),
-    "Falta entrada",
+    "Falta entrada · 1 omisión(es) de marcación",
   );
   await c.setOffline(true);
   await p.reload();
@@ -190,18 +190,18 @@ const assert = require("node:assert/strict");
   assert.equal(
     await p
       .locator(".current-period")
-      .getByLabel("Omisiones oficiales: 0", { exact: true })
+      .getByLabel("Omisiones de marcación: 1", { exact: true })
       .count(),
     1,
   );
   assert.equal(
     await p.locator(".punch-card .status").innerText(),
-    "Falta entrada",
+    "Falta entrada · 1 omisión(es) de marcación",
   );
   assert.deepEqual(errors, []);
   await b.close();
   console.log(
-    "PASS automático: 120 min, checkboxes condicionales, justificar/desjustificar, totales detectados/justificados/computables, calendario, historial íntegro, límites lluvia, incompletos sin omisiones y offline.",
+    "PASS automático: 120 min, checkboxes condicionales, justificar/desjustificar, totales detectados/justificados/computables, calendario, historial íntegro, límites lluvia, incompletos con omisiones tras salida y offline.",
   );
 })().catch((e) => {
   console.error(e);
