@@ -162,8 +162,8 @@ const path = require("node:path");
   await page.getByRole("button", { name: "Resumen", exact: true }).click();
   assert.equal(await page.locator(".summary-card").count(), 3);
   assert.equal(
-    await page.locator('[data-summary-link="3"] .preventive').count(),
-    1,
+    await page.locator('[data-summary-link="3"] [data-margin="late"]').getAttribute("data-level"),
+    "red",
   );
   const link2 = page.locator('[data-summary-link="2"]');
   assert.equal(await link2.locator("details").getAttribute("open"), null);

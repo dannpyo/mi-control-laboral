@@ -1,3 +1,4 @@
+import { incidenceMargin } from "./modules/margins.js";
 import { createBackupManager, backupDocument } from "./data/manager.js";
 import { backupControls, createBackupUI } from "./data/ui.js";
 import {
@@ -134,7 +135,7 @@ function recordCard(date, id) {
       : config.holidays.includes(date)
         ? "special"
         : "scheduled";
-  return `<article class="card record-card"><div class="card-top"><h3>${esc(displayName(l))}</h3><button class="text-button" data-edit="${id}" data-date="${date}">Editar</button></div><div class="record-times"><span>Entrada <strong>${r?.entry || "—"}</strong></span><span>Salida <strong>${r?.exit || "—"}</strong></span></div><p class="status ${state}">${esc(r ? shortStatus(r) : config.holidays.includes(date) ? "Feriado libre" : "Sin registrar")}</p>${l.day !== parseDate(date).getDay() ? '<span class="muted">Jornada excepcional</span>' : ""}</article>`;
+  return `<article class="card record-card"><div class="card-top"><h3>${esc(displayName(l))}</h3><button class="text-button" data-edit="${id}" data-date="${date}">Editar</button></div><div class="record-times"><span>Entrada <strong>${r?.entry || "—"}</strong></span><span>Salida <strong>${r?.exit || "—"}</strong></span></div><p class="status ${state}">${esc(r ? shortStatus(r) : config.holidays.includes(date) ? "Feriado libre" : "Sin registrar")}</p>${dayEffect(r)}${l.day !== parseDate(date).getDay() ? '<span class="muted">Jornada excepcional</span>' : ""}</article>`;
 }
 function currentHomeLink() {
   return (
@@ -157,6 +158,65 @@ function counterGrid(s) {
     )
     .join("")}</div>`;
 }
+function marginSection(s) {
+  return `<section class="incidence-margin" aria-label="Margen de incidencias"><h3>Margen de incidencias</h3><ul>${incidenceRows(
+    s,
+  )
+    .map(([label, n, type]) => {
+      const m = incidenceMargin(n, type);
+      return `<li data-margin="${type}" data-level="${m.level}"><div><strong>${label}</strong><span class="margin-badge ${m.level === "green" ? "validated" : m.level === "amber" ? "review" : "incident"}">Margen: ${m.remaining}</span></div><p>${n} computable${n === 1 ? "" : "s"}${m.message ? ` · ${m.message}` : ""}</p></li>`;
+    })
+    .join("")}</ul></section>`;
+}
+function immediateRisk(s) {
+  const risks = incidenceRows(s)
+    .map(([label, n, type]) => ({ label, type, m: incidenceMargin(n, type) }))
+    .filter(({ m }) => m.remaining === 0);
+  if (!risks.length) return "";
+  const reached = risks.filter(({ m }) => m.reached),
+    next = risks.filter(({ m }) => !m.reached);
+  const names = (rows) =>
+    rows
+      .map((r) =>
+        r.type === "late"
+          ? "tardanzas"
+          : r.type === "early"
+            ? "salidas anticipadas"
+            : "omisiones",
+      )
+      .join(", ");
+  const text = [
+    reached.length
+      ? `Umbral de posible descuento alcanzado: ${names(reached)}.`
+      : "",
+    next.length
+      ? `La próxima incidencia podría generar descuento: ${names(next)}.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return `<p class="compact-alert sanction immediate-risk">${esc(text)}</p>`;
+}
+function dayEffect(r) {
+  if (!r) return "";
+  const a = assessment(r, config),
+    p = period(r.date),
+    s = stats(records, config, r.link, p);
+  const effects = [
+    ["tardanza", a.lateCount, s.late],
+    ["salida anticipada", a.earlyCount, s.early],
+    ["omisión", a.omissions, s.omissions],
+  ].filter(([, n]) => n);
+  if (effects.length)
+    return `<p class="muted day-effect">Efecto en ${dateLabel(p.start)} – ${dateLabel(p.end)}: ${effects.map(([label, n, total]) => `+${n} ${n === 1 ? label : label === "omisión" ? "omisiones" : label === "tardanza" ? "tardanzas" : "salidas anticipadas"} (total ${total})`).join(" · ")}.</p>`;
+  if (
+    a.lateJustified ||
+    a.earlyJustified ||
+    (a.omissionDetected && a.omissionJustified)
+  )
+    return '<p class="muted day-effect">Justificada: no suma al contador sancionable.</p>';
+  return "";
+}
 function sanctionText(label, n, type) {
   const value = fine(n, type);
   return value === 0
@@ -171,12 +231,6 @@ function home() {
     schedule = r?.schedule || l,
     p = period(today);
   const s = l ? stats(records, config, id, p) : null;
-  const alert =
-    s &&
-    incidenceRows(s)
-      .map(([label, n, type]) => sanctionText(label, n, type))
-      .filter(Boolean)
-      .join(" · ");
   const recent = records
     .filter((r) => r.date <= today && (!id || r.link === id))
     .sort(
@@ -191,7 +245,7 @@ function home() {
     <div class="punch-times"><div><span>Entrada</span><strong id="saved-entry">${r?.entry || "— — : — —"}</strong></div><div><span>Salida</span><strong id="saved-exit">${r?.exit || "— — : — —"}</strong></div></div>
     ${r ? `<p class="status ${calendarState(r, config)}">${esc(shortStatus(r))}</p>` : ""}<div class="punch-actions"><button data-mark="entry" ${!l || r?.entry ? "disabled" : ""}>Marcar entrada</button><button data-mark="exit" class="secondary" ${!l || r?.exit ? "disabled" : ""}>Marcar salida</button></div>
     <button id="manual" class="text-button" ${!l ? "disabled" : ""}>Corregir o ingresar horario</button><p class="personal-note">No sustituye al reloj biométrico oficial.</p></section>
-    ${s ? `<section class="card current-period"><div class="card-top"><h2>Este período</h2><span>${dateLabel(p.start)} – ${dateLabel(p.end)}</span></div>${counterGrid(s)}${alert ? `<p class="compact-alert sanction">${esc(alert)}</p>` : incidenceRows(s).some(([, n]) => n >= 2) ? '<p class="compact-alert preventive">Segunda incidencia: revisa el resumen antes de alcanzar el próximo umbral.</p>' : ""}</section>` : ""}
+    ${s ? `<section class="card current-period"><div class="card-top"><h2>Este período</h2><span>${dateLabel(p.start)} – ${dateLabel(p.end)}</span></div>${counterGrid(s)}${immediateRisk(s)}</section>` : ""}
     <section class="recent"><h2>Registros recientes</h2>${recent.length ? `<ul>${recent.map((r) => `<li><button class="recent-row" data-edit="${r.link}" data-date="${r.date}"><span><strong>${dateLabel(r.date)} · ${esc(linkName(r.link))}</strong><small>${esc(shortStatus(r))}</small></span><span>${r.entry || "—"}<small>${r.exit || "—"}</small></span></button></li>`).join("")}</ul>` : '<p class="empty">Todavía no hay registros para este vínculo.</p>'}</section>`;
 }
 function calendar() {
@@ -252,9 +306,8 @@ function summary() {
             a.late || a.early || a.omissionDetected || a.possibleAbsence,
         )
         .sort((a, b) => b.r.date.localeCompare(a.r.date));
-      return `<article class="card summary-card" data-summary-link="${l.id}"><h2>${esc(displayName(l))}</h2>${counterGrid(s)}<p class="muted">Posibles ausencias: <strong>${s.possibleAbsences}</strong></p><p class="omission-balance">Omisión permitida: <strong>${Math.max(0, 1 - s.omissions)}/1 disponible</strong></p>
+      return `<article class="card summary-card" data-summary-link="${l.id}"><h2>${esc(displayName(l))}</h2>${counterGrid(s)}${marginSection(s)}<p class="muted">Posibles ausencias: <strong>${s.possibleAbsences}</strong></p><p class="omission-balance">Omisión permitida: <strong>${Math.max(0, 1 - s.omissions)}/1 disponible</strong></p>
       ${sanctions.length ? sanctions.map((text) => `<p class="compact-alert sanction">${esc(text)}</p>`).join("") : '<p class="no-sanction">Sin sanciones estimadas</p>'}
-      ${!sanctions.length && rows.some(([, n]) => n >= 2) ? '<p class="compact-alert preventive">Segunda incidencia · alerta preventiva</p>' : ""}
       <details><summary>Ver fechas de incidencia${incidents.length ? ` (${incidents.length})` : ""}</summary><p class="muted">Llegadas tardías: ${s.lateDetected} detectadas · ${s.lateJustified} justificadas · ${s.late} computables.<br>Salidas anticipadas: ${s.earlyDetected} detectadas · ${s.earlyJustified} justificadas · ${s.early} computables.<br>Omisiones: ${s.omissionsDetected} detectadas · ${s.omissionsJustified} justificadas · ${s.omissions} computables.</p>${incidents.length ? `<ul class="incident-dates">${incidents.map(({ r, a }) => `<li><button class="text-button" data-edit="${r.link}" data-date="${r.date}">${dateLabel(r.date)} · ${[a.late ? `Llegada tardía · ${a.lateMinutes} min${a.lateJustified ? " · justificada" : ""}` : "", a.early ? `Salida anticipada · ${a.earlyMinutes} min${a.earlyJustified ? " · justificada" : ""}` : "", a.omissionDetected ? `${a.omissionDetected} omisión(es)${a.omissionJustified ? " · justificada(s)" : ""}` : "", a.possibleAbsence ? "Posible ausencia" : ""].filter(Boolean).join(" · ")}</button></li>`).join("")}</ul>` : '<p class="muted">No hay incidencias detectadas en este período.</p>'}</details></article>`;
     })
     .join("");
