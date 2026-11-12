@@ -848,3 +848,60 @@ pre {
   font-size: 10px;
   overflow-wrap: anywhere;
 }
+
+/* Guardias privadas: módulo independiente, mismos tokens de color. */
+#private-root .period-picker select {
+  flex: 1;
+  min-width: 0;
+  width: 0;
+  font-size: 12px;
+}
+#private-root .page-heading h1 {
+  font-size: 24px;
+}
+#private-root .page-heading > span {
+  font-size: 10px;
+}
+.private-amount {
+  display: block;
+  font-size: clamp(28px, 7vw, 38px);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -1px;
+  margin: 12px 0;
+}
+.private-row h2 {
+  font-size: 14px;
+  margin: 0;
+}
+.private-row .card-top > strong {
+  font-size: 14px;
+}
+.private-row p {
+  font-size: 12px;
+  margin: 8px 0;
+}
+.private-row .actions {
+  margin: 4px 0 0;
+}
+.private-dialog input[type="datetime-local"] {
+  font-size: 14px;
+}
+#private-preview {
+  padding: 12px 0;
+  font-size: 12px;
+}
+#private-settings-root summary {
+  font-size: 13px;
+}
+#private-root input,
+#private-root select {
+  max-width: 100%;
+}
+@media (max-width: 360px) {
+  #private-root .page-heading {
+    flex-wrap: wrap;
+  }
+  nav button {
+    font-size: 11px;
+  }
+}

@@ -26,17 +26,19 @@ const launch = {
     if (m.type() === "error") errors.push(m.text());
   });
   p.on("dialog", (d) => d.accept());
-  await p.clock.install({ time: new Date("2026-11-12T07:29:00-03:00") });
+  await p.clock.install({ time: new Date("2026-11-12T07:28:00-03:00") });
+  await p.clock.pauseAt(new Date("2026-11-12T07:29:00-03:00"));
   await p.goto(base);
   await p.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
   await p.evaluate(() => navigator.serviceWorker.ready);
   await p.reload();
   await p.waitForFunction(() => !!navigator.serviceWorker.controller);
-  assert.equal(await p.locator("nav button").count(), 3);
+  assert.equal(await p.locator("nav button").count(), 4);
   assert.deepEqual(await p.locator("nav button").allTextContents(), [
     "Inicio",
     "Calendario",
     "Resumen",
+    "Guardias",
   ]);
   assert.equal(await p.locator("#quick-link").inputValue(), "2");
   assert.equal(await p.locator("#live-clock").textContent(), "07:29:00");

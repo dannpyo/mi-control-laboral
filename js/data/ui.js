@@ -11,9 +11,9 @@ export function backupControls() {
   return `<div id="backup-controls"><p class="muted">Comprobando respaldo…</p></div>
     <div class="actions"><button id="json-export">Exportar JSON</button><button id="csv-export" class="secondary">Exportar CSV</button></div>
     <label>Importar respaldo JSON (hasta 20 MB)<input id="json-import" type="file" accept="application/json,.json"></label>
-    <label class="check"><input type="checkbox" id="restore-config">Restaurar también la configuración del respaldo</label>
+    <label class="check"><input type="checkbox" id="import-private" checked>Incluir Guardias privadas compatibles (agrega sin sobrescribir)</label><label class="check"><input type="checkbox" id="restore-config">Restaurar también la configuración del respaldo</label>
     <p class="muted">La importación conserva jornadas coincidentes. Los respaldos incluyen configuración e historial, no permisos de carpeta. No se envían datos a servicios externos.</p>
-    <hr><h3>Limpieza de registros</h3><p class="muted">Conserva horarios, feriados, tolerancias, apariencia y ajustes de respaldo.</p>
+    <hr><h3>Limpieza de registros</h3><p class="muted">Solo jornadas DGVS/HGI. Conserva Guardias privadas, horarios, feriados, tolerancias, apariencia y ajustes de respaldo.</p>
     <button id="clear-records" class="secondary">Borrar todos los registros</button>`;
 }
 export function createBackupUI(manager, { notice, manualExport, onCleared }) {
@@ -108,7 +108,7 @@ export function createBackupUI(manager, { notice, manualExport, onCleared }) {
           const snapshot = await getSnapshot();
           const dialog = document.createElement("dialog");
           dialog.setAttribute("aria-labelledby", "clear-title");
-          dialog.innerHTML = `<h2 id="clear-title">Borrar todos los registros</h2><p>Se eliminarán <strong>${snapshot.records.length} jornadas</strong> y sus historiales. No podrás recuperarlos sin un respaldo.</p><p class="muted">Los archivos JSON existentes y todas las configuraciones se conservarán.</p><div class="actions"><button id="clear-export" class="secondary">Descargar respaldo antes de borrar</button><button id="clear-folder" class="secondary" ${!manager.supported() ? "disabled" : ""}>Crear copia en carpeta</button></div><div id="first-clear-step"><button id="clear-first">Confirmar primera vez</button></div><form id="final-clear-step" hidden><label>Segunda confirmación: escribe BORRAR<input id="clear-word" autocomplete="off" spellcheck="false" required pattern="BORRAR"></label><button id="clear-final" type="submit" disabled>Borrar definitivamente</button></form><p id="clear-feedback" role="status"></p><button id="clear-cancel" class="text-button">Cancelar</button>`;
+          dialog.innerHTML = `<h2 id="clear-title">Borrar todos los registros</h2><p>Se eliminarán <strong>${snapshot.records.length} jornadas</strong> y sus historiales. No podrás recuperarlos sin un respaldo.</p><p class="muted">Los archivos JSON, las Guardias privadas y todas las configuraciones se conservarán.</p><div class="actions"><button id="clear-export" class="secondary">Descargar respaldo antes de borrar</button><button id="clear-folder" class="secondary" ${!manager.supported() ? "disabled" : ""}>Crear copia en carpeta</button></div><div id="first-clear-step"><button id="clear-first">Confirmar primera vez</button></div><form id="final-clear-step" hidden><label>Segunda confirmación: escribe BORRAR<input id="clear-word" autocomplete="off" spellcheck="false" required pattern="BORRAR"></label><button id="clear-final" type="submit" disabled>Borrar definitivamente</button></form><p id="clear-feedback" role="status"></p><button id="clear-cancel" class="text-button">Cancelar</button>`;
           document.body.append(dialog);
           dialog.showModal();
           let firstConfirmed = false;
