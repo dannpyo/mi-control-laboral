@@ -22,10 +22,10 @@ const path = require("node:path");
   await page.goto(
     process.env.TEST_URL || "http://localhost:8766/mi-control-laboral/",
   );
-  await page.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
+  await page.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
-  await page.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
+  await page.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
   await page.getByRole("button", { name: "Calendario", exact: true }).click();
   for (const [date, links] of [
     ["2026-11-04", ["1"]],
@@ -56,6 +56,7 @@ const path = require("node:path");
     .click();
   await page.locator("[name=entry]").fill("07:30");
   await page.locator("[name=exit]").fill("18:29");
+  await page.getByText("Más opciones", { exact: true }).click();
   await page.locator("[name=earlyState]").selectOption("justified");
   await page.locator("[name=officialEntry]").selectOption("marked");
   await page.locator("[name=officialExit]").selectOption("marked");
@@ -127,7 +128,7 @@ const path = require("node:path");
     (await import("./js/storage/db.js")).getRecords(),
   );
   await page.reload();
-  await page.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
+  await page.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
   await page.getByRole("button", { name: "Calendario", exact: true }).click();
   assert.equal(
     await page
@@ -163,9 +164,8 @@ const path = require("node:path");
   assert.equal(await link2.locator("details").getAttribute("open"), null);
   assert.doesNotMatch(await link2.innerText(), /Estimación: 0 días/);
   await link2.locator("summary").click();
-  assert.match(await link2.innerText(), /22 h 29 min/);
-  assert.match(await link2.innerText(), /Con marcaciones incompletas/);
-  assert.doesNotMatch(await link2.innerText(), /10\.98/);
+  assert.match(await link2.innerText(), /12\/11\/2026.*Tardanza/);
+  assert.doesNotMatch(await link2.innerText(), /estadísticas completas/);
   await page.locator("#filter-link").selectOption("2");
   assert.equal(await page.locator(".summary-card").count(), 1);
   await page
@@ -215,7 +215,7 @@ const path = require("node:path");
     );
   });
   await page.reload();
-  await page.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
+  await page.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
   await page.getByRole("button", { name: "Resumen", exact: true }).click();
   assert.equal(
     await page.locator('[data-summary-link="3"] .sanction').count(),
@@ -251,14 +251,14 @@ const path = require("node:path");
   });
   await context.setOffline(true);
   await page.reload();
-  await page.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
+  await page.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
   await page.getByRole("button", { name: "Calendario", exact: true }).click();
   await page.locator('[data-day="2026-11-04"]').click();
   assert.equal(await page.locator("#view [data-edit]").count(), 2);
   assert.deepEqual(errors, []);
   await browser.close();
   console.log(
-    "PASS v1.1 móvil: días y filtros, excepción, indicadores diferenciados, resumen compacto expandible, tiempo entero, períodos, lectura sin mutaciones, 320–1440 px y offline.",
+    "PASS regresión calendario v2.0: días y filtros, excepción, indicadores diferenciados, resumen compacto y fechas desplegables, períodos, lectura sin mutaciones, 320–1440 px y offline.",
   );
 })().catch((e) => {
   console.error(e);
