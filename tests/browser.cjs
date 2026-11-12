@@ -77,7 +77,7 @@ const launch = {
   assert.equal(await p.locator("#saved-entry").textContent(), "07:29");
   assert.match(
     await p.locator(".punch-card .status").innerText(),
-    /Por revisar/,
+    /Registrada/,
   );
   await p
     .getByRole("button", { name: "Corregir o ingresar horario", exact: true })
@@ -94,7 +94,7 @@ const launch = {
     .getByRole("button", { name: "Corregir o ingresar horario", exact: true })
     .click();
   await p.getByText("Más opciones", { exact: true }).click();
-  await p.locator("[name=lateState]").selectOption("unjustified");
+  assert.equal(await p.locator("[name=lateJustified]").isChecked(), false);
   await p.locator("[name=officialEntry]").selectOption("marked");
   await p.locator("[name=officialExit]").selectOption("marked");
   await p.locator("[name=closed]").check();
@@ -151,7 +151,7 @@ const launch = {
   await p.locator('[data-summary-link="2"] summary').click();
   assert.match(
     await p.locator('[data-summary-link="2"] .incident-dates').innerText(),
-    /12\/11\/2026.*Tardanza/,
+    /12\/11\/2026.*Llegada tardía/,
   );
   await p
     .getByRole("button", { name: "Período siguiente", exact: true })

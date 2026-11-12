@@ -74,7 +74,7 @@ test("contadores independientes por vínculo, tipo y período; reinicio sin borr
   assert.equal(stats(rs, config, "1", period("2026-11-16"), now).late, 0);
   assert.equal(rs.length, 3);
 });
-test("solo injustificadas cuentan; pendientes visibles y justificadas excluidas", () => {
+test("cómputo automático salvo justificación, incluidos estados pendientes heredados", () => {
   for (const state of ["pending", "justified", "unjustified"]) {
     const a = assessment(
       record({
@@ -89,9 +89,9 @@ test("solo injustificadas cuentan; pendientes visibles y justificadas excluidas"
       config,
       now,
     );
-    assert.equal(a.lateCount, state === "unjustified" ? 1 : 0);
-    assert.equal(a.earlyCount, state === "unjustified" ? 1 : 0);
-    assert.equal(a.pending, state === "pending");
+    assert.equal(a.lateCount, state !== "justified" ? 1 : 0);
+    assert.equal(a.earlyCount, state !== "justified" ? 1 : 0);
+    assert.equal(a.pending, false);
   }
 });
 test("omisión oficial explícita, solo al cerrar y después de la salida", () => {
