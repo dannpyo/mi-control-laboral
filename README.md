@@ -37,7 +37,7 @@ La leyenda del calendario conserva la distinción entre completa/validada, pendi
 
 ### Datos, compatibilidad y respaldos
 
-La corrección de incidencias automáticas mantiene `js/storage/db.js`, los horarios, tolerancias y escalas normativas. No cambia el nombre `mi-control-laboral`, IndexedDB versión 1, sus almacenes (`records`, `settings`), sus claves ni el origen de la aplicación. No hay migraciones de estructura, reinicios ni reescrituras automáticas de registros. Las justificaciones heredadas se interpretan al leer: `justified` conserva la justificación; `pending` y `unjustified` cuentan si se detecta incidencia. Los valores originales y su auditoría permanecen intactos; una edición explícita guarda las casillas usando los campos anteriores. Los incompletos se muestran como «Falta entrada», «Falta salida» o «Sin registrar», sin omisión ni ausencia automática. Las correcciones explícitas continúan dejando auditoría anterior/posterior y control de revisión entre pestañas.
+La corrección de incidencias conserva horarios, tolerancias y escalas normativas. La mejora de Datos y respaldos añade metadatos transaccionales en `settings` y una limpieza selectiva en `js/storage/db.js`. No cambia el nombre `mi-control-laboral`, IndexedDB versión 1, sus almacenes (`records`, `settings`), sus claves ni el origen de la aplicación. No hay migraciones de estructura, reinicios ni reescrituras automáticas de registros. El borrado de jornadas solo se ejecuta por decisión explícita del usuario tras doble confirmación. Las justificaciones heredadas se interpretan al leer: `justified` conserva la justificación; `pending` y `unjustified` cuentan si se detecta incidencia. Los valores originales y su auditoría permanecen intactos; una edición explícita guarda las casillas usando los campos anteriores. Los incompletos se muestran como «Falta entrada», «Falta salida» o «Sin registrar», sin omisión ni ausencia automática. Las correcciones explícitas continúan dejando auditoría anterior/posterior y control de revisión entre pestañas.
 
 En Configuración:
 
@@ -57,7 +57,7 @@ js/modules/domain.js          Reglas, estadísticas y validaciones conservadas
 js/modules/presentation.js    Reloj local, vínculo automático y preferencia visual
 js/storage/db.js              IndexedDB e importación conservados
 manifest.webmanifest          Instalación PWA
-sw.js                         Caché v2.0.1, solo recursos estáticos
+sw.js                         Caché v2.1.0, solo recursos estáticos
 assets/icons/                 Iconos existentes
 tests/                        Reglas, interfaz, móvil y actualización
 tests/automatic-incidents.*   Ejemplo de 120 min, justificaciones y compatibilidad
@@ -84,6 +84,7 @@ Pruebas de navegador con Playwright/Chromium como herramientas de desarrollo, no
 
 ```sh
 TEST_URL=http://localhost:8000/ node tests/browser.cjs
+TEST_URL=http://localhost:8000/ node tests/data-controls.cjs
 TEST_URL=http://localhost:8000/ node tests/automatic-incidents.cjs
 TEST_URL=http://localhost:8000/ node tests/mobile-v11.cjs
 ```
@@ -107,8 +108,19 @@ La configuración de GitHub Pages no se modifica en esta entrega. Las rutas perm
 
 Para instalar en Android, abrir la URL HTTPS en Chrome y elegir «Instalar aplicación» o «Añadir a pantalla de inicio». La primera carga necesita conexión; tras activar el Service Worker, la app y la edición funcionan offline. En escritorio puede usarse o instalarse desde un navegador compatible.
 
-Al actualizar, abrir con conexión para descargar el nuevo Service Worker, cerrar todas las pestañas/ventanas de la app y volver a abrir. No se fuerza una recarga durante una edición. La caché v2.0.1 conserva juntos HTML, CSS y módulos de la versión activa y nunca contiene registros. Cambiar `VERSION`, los recursos de `SHELL` y sus identificadores `?v=` cuando corresponda en futuras versiones.
+Al actualizar, abrir con conexión para descargar el nuevo Service Worker, cerrar todas las pestañas/ventanas de la app y volver a abrir. No se fuerza una recarga durante una edición. La caché v2.1.0 conserva juntos HTML, CSS y módulos de la versión activa y nunca contiene registros. Cambiar `VERSION`, los recursos de `SHELL` y sus identificadores `?v=` cuando corresponda en futuras versiones.
 
 La instalación y los flujos se prueban en Chromium y con emulación Android; queda pendiente la comprobación de la versión 2.0 en un Android físico.
 
 La corrección puntual de incidencias automáticas y sus pruebas se detallan en `docs/INCIDENCIAS-AUTOMATICAS.md`.
+
+
+### Datos y respaldos locales
+
+En Configuración → Datos y respaldos puedes seleccionar/cambiar una carpeta, activar o desactivar las copias automáticas, crear/verificar una copia ahora y consultar su estado/fecha. Requiere File System Access API y Web Locks; **el soporte real en Android debe comprobarse en el dispositivo**. Si no está disponible, se mantiene la exportación JSON y un recordatorio cada siete días en esta sección, solo con la app abierta.
+
+Las copias se escriben después de confirmar el guardado laboral, se verifican mediante lectura y tienen nombres únicos. Se pueden agrupar por día y omitir contenido sin cambios. No se eliminan copias históricas ni se guardan handles en el JSON. Un fallo no revierte la jornada.
+
+«Borrar todos los registros» muestra la cantidad, ofrece respaldo previo y exige dos confirmaciones, la segunda escribiendo `BORRAR`. Limpia únicamente jornadas e historiales y conserva configuración, feriados, tema y ajustes de respaldo. Las copias existentes quedan intactas y el automático queda en pausa hasta que se elija Crear respaldo ahora. Una copia del estado vacío requiere decisión explícita; no se genera automáticamente.
+
+Detalles de compatibilidad, integridad, conservación, pruebas y limitaciones: [Datos y respaldos](docs/DATOS-Y-RESPALDOS.md).

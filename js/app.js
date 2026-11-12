@@ -1,3 +1,5 @@
+import { createBackupManager, backupDocument } from "./data/manager.js";
+import { backupControls, createBackupUI } from "./data/ui.js";
 import {
   THEME_KEY,
   EXPECTED_ZONE,
@@ -28,6 +30,7 @@ import {
   saveConfig,
   saveRecord,
   importBackup,
+  getSnapshot,
 } from "./storage/db.js";
 const $ = (s) => document.querySelector(s);
 const esc = (s) =>
@@ -250,7 +253,7 @@ function summary() {
   return `<h1>Resumen</h1><div class="period-picker"><button id="period-prev" class="secondary" aria-label="Período anterior">‹</button><div><span>Período administrativo</span><strong>${dateLabel(p.start)} – ${dateLabel(p.end)}</strong></div><button id="period-next" class="secondary" aria-label="Período siguiente">›</button></div>${filters()}${cards}<p class="regulation-note">Normativa informativa configurada por el usuario, pendiente de verificación institucional. No constituye una decisión disciplinaria oficial.</p>`;
 }
 function settings() {
-  return `<h1>Configuración</h1><form id="settings-form"><details class="card settings-group"><summary>Horarios e inicio del seguimiento</summary><p class="muted">Cambios aplicables a jornadas nuevas. Los registros existentes conservan su horario y tolerancia.</p><label>Inicio del seguimiento<input name="startDate" type="date" value="${config.startDate}" required aria-describedby="tracking-help"></label><p id="tracking-help" class="muted">Desde esta fecha se señalan jornadas programadas transcurridas sin registro para revisión. No genera faltas retroactivas, no cambia tus registros ni los períodos anteriores. Puedes cargar jornadas históricas manualmente: se cuentan solo en su período. La programación del período se muestra completa, incluso antes del seguimiento.</p>${config.links.map((l) => `<fieldset><legend>${esc(l.name)}</legend><label>Nombre<input name="name${l.id}" maxlength="80" value="${esc(l.name)}" required></label><label>Día<select name="day${l.id}">${days.map((d, i) => `<option value="${i}" ${l.day === i ? "selected" : ""}>${d}</option>`).join("")}</select></label><div class="filters"><label>Entrada<input type="time" name="start${l.id}" value="${l.start}" required></label><label>Salida<input type="time" name="end${l.id}" value="${l.end}" required></label></div></fieldset>`).join("")}</details><details class="card settings-group"><summary>Tolerancias</summary><label>Normal (minutos)<input type="number" name="normalTolerance" min="0" max="180" value="${config.normalTolerance}" required></label><label>Lluvia: total de minutos, no adicional<input type="number" name="rainTolerance" min="0" max="180" value="${config.rainTolerance}" required></label></details><details class="card settings-group"><summary>Feriados</summary><p>No se descarga un calendario externo. Introduce las fechas oficiales que correspondan. Son libres por defecto para los tres vínculos. En el calendario puedes cambiar una fecha y vínculo a «Feriado trabajado» u otra situación. Los registros ya guardados son excepciones y se conservan.</p><label>Fechas, una por línea (AAAA-MM-DD)<textarea name="holidays" rows="5" placeholder="2026-12-25">${esc(config.holidays.join("\n"))}</textarea></label></details><button type="submit">Guardar configuración</button></form><details class="card settings-group"><summary>Reglas de incidencia</summary><p class="muted">Configuración informativa pendiente de verificación institucional.</p><p>Una omisión oficial de entrada o salida permitida por vínculo y período. Solo se cuentan omisiones confirmadas en una jornada cerrada, una vez transcurrido su horario de salida.</p><p>Omisiones: 0–1 → 0 días; 2 → 1; 3 → 2; 4 → 3; 5 → 4; más de 5 → revisión normativa.</p><p>Tardanzas y salidas anticipadas, cada tipo por separado: 0–2 → 0 días; 3 → 1; 4 → 2; 5 → 3; 6 → 4; 7 o más → 5 días.</p><p>Las incidencias detectadas cuentan automáticamente salvo que marques su casilla de justificación. Una jornada sin marcaciones no se convierte en ausencia injustificada. Las jornadas futuras no suman incidencias. La ausencia injustificada se identifica, sin inventar una escala de sanción adicional.</p></details><section class="card"><h2>Respaldo local</h2><p>Exporta regularmente: el navegador puede borrar sus datos. JSON conserva configuración e historial de cambios. CSV sirve para consulta y no para restaurar.</p><div class="actions"><button id="json-export">Exportar JSON</button><button id="csv-export" class="secondary">Exportar CSV</button></div><label>Importar respaldo JSON (hasta 20 MB)<input id="json-import" type="file" accept="application/json,.json"></label><label class="check"><input type="checkbox" id="restore-config">Restaurar también la configuración del respaldo</label><p class="muted">La importación agrega solo jornadas inexistentes; las coincidentes se omiten sin sobrescribirlas. La configuración actual se conserva salvo que elijas restaurarla. No se envían datos a servicios externos.</p></section>`;
+  return `<h1>Configuración</h1><form id="settings-form"><details class="card settings-group"><summary>Horarios e inicio del seguimiento</summary><p class="muted">Cambios aplicables a jornadas nuevas. Los registros existentes conservan su horario y tolerancia.</p><label>Inicio del seguimiento<input name="startDate" type="date" value="${config.startDate}" required aria-describedby="tracking-help"></label><p id="tracking-help" class="muted">Desde esta fecha se señalan jornadas programadas transcurridas sin registro para revisión. No genera faltas retroactivas, no cambia tus registros ni los períodos anteriores. Puedes cargar jornadas históricas manualmente: se cuentan solo en su período. La programación del período se muestra completa, incluso antes del seguimiento.</p>${config.links.map((l) => `<fieldset><legend>${esc(l.name)}</legend><label>Nombre<input name="name${l.id}" maxlength="80" value="${esc(l.name)}" required></label><label>Día<select name="day${l.id}">${days.map((d, i) => `<option value="${i}" ${l.day === i ? "selected" : ""}>${d}</option>`).join("")}</select></label><div class="filters"><label>Entrada<input type="time" name="start${l.id}" value="${l.start}" required></label><label>Salida<input type="time" name="end${l.id}" value="${l.end}" required></label></div></fieldset>`).join("")}</details><details class="card settings-group"><summary>Tolerancias</summary><label>Normal (minutos)<input type="number" name="normalTolerance" min="0" max="180" value="${config.normalTolerance}" required></label><label>Lluvia: total de minutos, no adicional<input type="number" name="rainTolerance" min="0" max="180" value="${config.rainTolerance}" required></label></details><details class="card settings-group"><summary>Feriados</summary><p>No se descarga un calendario externo. Introduce las fechas oficiales que correspondan. Son libres por defecto para los tres vínculos. En el calendario puedes cambiar una fecha y vínculo a «Feriado trabajado» u otra situación. Los registros ya guardados son excepciones y se conservan.</p><label>Fechas, una por línea (AAAA-MM-DD)<textarea name="holidays" rows="5" placeholder="2026-12-25">${esc(config.holidays.join("\n"))}</textarea></label></details><button type="submit">Guardar configuración</button></form><details class="card settings-group"><summary>Reglas de incidencia</summary><p class="muted">Configuración informativa pendiente de verificación institucional.</p><p>Una omisión oficial de entrada o salida permitida por vínculo y período. Solo se cuentan omisiones confirmadas en una jornada cerrada, una vez transcurrido su horario de salida.</p><p>Omisiones: 0–1 → 0 días; 2 → 1; 3 → 2; 4 → 3; 5 → 4; más de 5 → revisión normativa.</p><p>Tardanzas y salidas anticipadas, cada tipo por separado: 0–2 → 0 días; 3 → 1; 4 → 2; 5 → 3; 6 → 4; 7 o más → 5 días.</p><p>Las incidencias detectadas cuentan automáticamente salvo que marques su casilla de justificación. Una jornada sin marcaciones no se convierte en ausencia injustificada. Las jornadas futuras no suman incidencias. La ausencia injustificada se identifica, sin inventar una escala de sanción adicional.</p></details><section class="card"><h2>Datos y respaldos</h2>${backupControls()}</section>`;
 }
 function render() {
   $("#view").innerHTML = { home, calendar, summary, settings }[section]();
@@ -263,6 +266,10 @@ function render() {
     );
   });
   bind();
+  if (section === "settings") {
+    backupUI.refresh();
+    backupUI.bindClear();
+  }
 }
 function bind() {
   $("#quick-link")?.addEventListener("change", (e) => {
@@ -350,6 +357,7 @@ function bind() {
         };
       validateConfig(next);
       await saveConfig(next);
+      void backupUI.automatic();
       config = next;
       render();
       notice("Configuración guardada.");
@@ -372,6 +380,7 @@ function bind() {
         const result = await importBackup(data, restore);
         if (restore) config = data.config;
         records = await getRecords();
+        if (result.added || restore) void backupUI.automatic();
         render();
         notice(
           `Respaldo importado: ${result.added} nuevas; ${result.skipped} coincidentes conservadas.`,
@@ -435,6 +444,7 @@ async function mark(field) {
     existing?.revision || 0,
   );
   records = await getRecords();
+  void backupUI.automatic();
   render();
   notice("Marcación personal guardada. No modifica el reloj biométrico.");
 }
@@ -539,6 +549,7 @@ $("#record-form").addEventListener("submit", (e) => {
       editing.revision || 0,
     );
     records = await getRecords();
+    void backupUI.automatic();
     selectedDate = r.date;
     month = r.date.slice(0, 7);
     $("#editor").close();
@@ -555,25 +566,17 @@ function download(content, type, name) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 async function exportData(format) {
-  const fresh = await getRecords(),
-    current = (await getConfig()) || config;
-  if (format === "json")
+  const snapshot = await getSnapshot(),
+    fresh = snapshot.records;
+  if (format === "json") {
     download(
-      JSON.stringify(
-        {
-          format: "mi-control-laboral",
-          version: 1,
-          exportedAt: new Date().toISOString(),
-          config: current,
-          records: fresh,
-        },
-        null,
-        2,
-      ),
+      JSON.stringify(backupDocument(snapshot), null, 2),
       "application/json",
       `mi-control-laboral-${localDate()}.json`,
     );
-  else {
+    await backupManager.noteManualExport().catch(() => {});
+    await backupUI.refresh();
+  } else {
     const columns = [
       "date",
       "link",
@@ -607,6 +610,23 @@ async function exportData(format) {
   }
   notice("Exportación preparada. Guarda el archivo en un lugar seguro.");
 }
+const backupManager = createBackupManager();
+const backupUI = createBackupUI(backupManager, {
+  notice,
+  manualExport: async (snapshot) => {
+    download(
+      JSON.stringify(backupDocument(snapshot), null, 2),
+      "application/json",
+      `mi-control-laboral-${localDate()}.json`,
+    );
+    await backupManager.noteManualExport().catch(() => {});
+  },
+  onCleared: async () => {
+    records = await getRecords();
+    render();
+    await backupUI.refresh();
+  },
+});
 document.querySelectorAll("[data-section]").forEach(
   (b) =>
     (b.onclick = () => {
@@ -646,6 +666,18 @@ async function init() {
     if (!(await getConfig())) await saveConfig(config);
     records = await getRecords();
     render();
+    // Reabrir solo consulta permisos; nunca solicita acceso sin acción del usuario.
+    void backupManager
+      .status()
+      .then((backupStatus) => {
+        if (
+          backupStatus.prefs.enabled &&
+          backupStatus.state === "pendiente" &&
+          !backupStatus.prefs.pausedAfterClear
+        )
+          void backupUI.automatic();
+      })
+      .catch(() => {});
   } catch (e) {
     $("#view").innerHTML =
       "<h1>No se pudo abrir el almacenamiento</h1><p>No registres datos hasta resolver el acceso a IndexedDB. Revisa el modo privado o el espacio disponible y vuelve a abrir la aplicación.</p>";
@@ -662,6 +694,7 @@ async function init() {
   }
 }
 window.addEventListener("focus", () => {
+  if (section === "settings") void backupUI.refresh();
   if (!busy && !$("#editor").open && config && !["settings"].includes(section))
     run(async () => {
       config = (await getConfig()) || config;

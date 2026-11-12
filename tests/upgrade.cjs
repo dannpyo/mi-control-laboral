@@ -56,13 +56,21 @@ const root = require("node:path").resolve(__dirname, "..");
   let page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  const waitFor = async (predicate) => {
+    const deadline = Date.now() + 30000;
+    while (Date.now() < deadline) {
+      if (await page.evaluate(predicate)) return;
+      await new Promise((r) => setTimeout(r, 30));
+    }
+    throw Error("El Service Worker no completó el estado esperado");
+  };
   await page.goto(url);
   await page
     .getByRole("heading", { name: "Aplicación en desarrollo", exact: true })
     .waitFor();
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
-  await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+  await waitFor(() => !!navigator.serviceWorker.controller);
   upgraded = true;
   await page.reload();
   await page.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
@@ -82,18 +90,18 @@ const root = require("node:path").resolve(__dirname, "..");
     const reg = await navigator.serviceWorker.ready;
     await reg.update();
   });
-  await page.waitForFunction(
+  await waitFor(
     async () => !!(await navigator.serviceWorker.getRegistration()).waiting,
   );
   await page.close();
   page = await ctx.newPage();
   await page.goto(url);
   await page.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
-  await page.waitForFunction(async () =>
-    (await caches.keys()).some((k) => k.endsWith(":v2.0.1")),
+  await waitFor(async () =>
+    (await caches.keys()).some((k) => k.endsWith(":v2.1.0")),
   );
   // Esperar la activación, no solo la existencia de la caché instalada.
-  await page.waitForFunction(async () => {
+  await waitFor(async () => {
     const registration = await navigator.serviceWorker.getRegistration();
     return (
       !registration.waiting &&
@@ -113,7 +121,7 @@ const root = require("node:path").resolve(__dirname, "..");
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: actualización real desde etapa 1 (SW v1), CSS/JS coherentes, activación al cerrar pestaña, conservación IndexedDB y recarga offline v2.0.1.",
+    "PASS: actualización real desde etapa 1 (SW v1), CSS/JS coherentes, activación al cerrar pestaña, conservación IndexedDB y recarga offline v2.1.0.",
   );
   await browser.close();
   await new Promise((r) => server.close(r));
