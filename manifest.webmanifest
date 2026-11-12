@@ -1,0 +1,16 @@
+{
+  "name": "Mi Control Laboral",
+  "short_name": "Mi Control",
+  "description": "Tu espacio personal para organizar tu jornada. Aplicación en desarrollo.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#101719",
+  "theme_color": "#101719",
+  "icons": [
+    {"src": "./assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "./assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "./assets/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
