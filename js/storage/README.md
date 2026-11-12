@@ -5,3 +5,6 @@
 Las escrituras de jornadas guardan auditoría y verifican la revisión anterior dentro de la misma transacción. La importación JSON valida todo antes de escribir, agrega solamente claves inexistentes y restaura opcionalmente la configuración en esa misma transacción. Los duplicados existentes nunca se sobrescriben.
 
 Los datos personales no se guardan en el Service Worker ni se transmiten. El almacenamiento del navegador puede borrarse: usar las exportaciones JSON como copias de respaldo.
+
+
+La mejora de Datos y respaldos mantiene la versión 1 y los mismos almacenes. `settings` incorpora `backupSettings` (incluido el handle, fuera del JSON) y `dataRevision`. `getSnapshot()` obtiene configuración y jornadas en una transacción consistente. `clearAllRecords()` valida revisión/cantidad y limpia únicamente `records`, pausando el respaldo en la misma transacción. Una escritura en curso no puede marcarse actualizada después de borrar o cambiar carpeta.

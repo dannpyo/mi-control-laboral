@@ -35,7 +35,8 @@ async function transaction(stores, mode, operation) {
     tx.oncomplete = () =>
       resolve(typeof result === "function" ? result() : result);
     tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error || Error("Operación cancelada"));
+    tx.onabort = () =>
+      reject(tx.error || tx.customError || Error("Operación cancelada"));
   });
 }
 export const getRecords = () =>
@@ -50,9 +51,10 @@ export const getConfig = () =>
   });
 export async function saveConfig(config) {
   validateConfig(config);
-  return transaction(["settings"], "readwrite", (tx) =>
-    tx.objectStore("settings").put(config, "config"),
-  );
+  return transaction(["settings"], "readwrite", (tx) => {
+    tx.objectStore("settings").put(config, "config");
+    bumpRevision(tx);
+  });
 }
 export async function saveRecord(
   record,
@@ -60,7 +62,7 @@ export async function saveRecord(
   expected = null,
 ) {
   validateRecord(record);
-  return transaction(["records"], "readwrite", (tx) => {
+  return transaction(["records", "settings"], "readwrite", (tx) => {
     const store = tx.objectStore("records");
     const q = store.get(record.id);
     q.onsuccess = () => {
@@ -85,6 +87,7 @@ export async function saveRecord(
         },
       ];
       store.put(next);
+      bumpRevision(tx);
     };
   });
 }
@@ -108,7 +111,10 @@ export async function importBackup(data, restoreConfig = false) {
   let added = 0,
     skipped = 0;
   await transaction(["records", "settings"], "readwrite", (tx) => {
-    if (restoreConfig) tx.objectStore("settings").put(data.config, "config");
+    if (restoreConfig) {
+      tx.objectStore("settings").put(data.config, "config");
+      bumpRevision(tx);
+    }
     const store = tx.objectStore("records");
     for (const r of data.records) {
       const q = store.get(r.id);
@@ -132,9 +138,157 @@ export async function importBackup(data, restoreConfig = false) {
             },
           ],
         });
+        if (!restoreConfig && added === 0) bumpRevision(tx);
         added++;
       };
     }
   });
   return { added, skipped };
+}
+
+// Metadatos fuera de config y del formato JSON; no se cambia la versión ni almacenes.
+function bumpRevision(tx) {
+  const store = tx.objectStore("settings"),
+    q = store.get("dataRevision");
+  q.onsuccess = () => store.put((q.result || 0) + 1, "dataRevision");
+}
+export function backupDefaults() {
+  return {
+    enabled: false,
+    handle: null,
+    groupDaily: true,
+    generation: 0,
+    pending: true,
+    pausedAfterClear: false,
+    lastVerifiedAt: null,
+    lastVerifiedRevision: null,
+    lastFingerprint: null,
+    lastDay: null,
+    lastFilename: null,
+    lastManualExportAt: null,
+    reminderSince: new Date().toISOString(),
+    error: null,
+  };
+}
+export async function getBackupSettings() {
+  return transaction(["settings"], "readwrite", (tx) => {
+    const store = tx.objectStore("settings"),
+      q = store.get("backupSettings");
+    q.onsuccess = () => {
+      if (!q.result) store.put(backupDefaults(), "backupSettings");
+    };
+    return () => q.result || backupDefaults();
+  });
+}
+export async function updateBackupSettings(patch) {
+  return transaction(["settings"], "readwrite", (tx) => {
+    const store = tx.objectStore("settings"),
+      q = store.get("backupSettings");
+    let next;
+    q.onsuccess = () => {
+      next = { ...backupDefaults(), ...q.result, ...patch };
+      store.put(next, "backupSettings");
+    };
+    return () => next;
+  });
+}
+export async function setBackupDestination(handle) {
+  return transaction(["settings"], "readwrite", (tx) => {
+    const store = tx.objectStore("settings"),
+      q = store.get("backupSettings");
+    q.onsuccess = () => {
+      const old = q.result || backupDefaults();
+      store.put(
+        {
+          ...old,
+          handle,
+          generation: old.generation + 1,
+          lastFingerprint: null,
+          lastDay: null,
+          pending: true,
+          error: null,
+        },
+        "backupSettings",
+      );
+    };
+  });
+}
+// Configuración y jornadas se leen en UNA transacción: una sola versión consistente.
+export async function getSnapshot() {
+  return transaction(["records", "settings"], "readonly", (tx) => {
+    const settings = tx.objectStore("settings"),
+      rows = tx.objectStore("records").getAll(),
+      config = settings.get("config"),
+      revision = settings.get("dataRevision"),
+      backup = settings.get("backupSettings");
+    return () => ({
+      records: rows.result,
+      config: config.result,
+      revision: revision.result || 0,
+      backup: backup.result || backupDefaults(),
+    });
+  });
+}
+export async function commitVerifiedBackup(info) {
+  return transaction(["settings"], "readwrite", (tx) => {
+    const store = tx.objectStore("settings"),
+      q = store.get("backupSettings"),
+      r = store.get("dataRevision");
+    let saved = false;
+    r.onsuccess = () => {
+      const prefs = q.result || backupDefaults();
+      if (prefs.generation !== info.generation) return;
+      store.put(
+        {
+          ...prefs,
+          lastVerifiedAt: info.at,
+          lastVerifiedRevision: info.revision,
+          lastFilename: info.filename,
+          lastFingerprint: info.fingerprint,
+          lastDay: info.day,
+          pending: (r.result || 0) !== info.revision,
+          pausedAfterClear: false,
+          error: null,
+        },
+        "backupSettings",
+      );
+      saved = true;
+    };
+    return () => saved;
+  });
+}
+// El borrado y la pausa del respaldo son atómicos; config y handle nunca se borran.
+export async function clearAllRecords(expectedRevision, expectedCount) {
+  return transaction(["records", "settings"], "readwrite", (tx) => {
+    const settings = tx.objectStore("settings"),
+      store = tx.objectStore("records");
+    const revision = settings.get("dataRevision"),
+      prefs = settings.get("backupSettings"),
+      count = store.count();
+    count.onsuccess = () => {
+      if (
+        (revision.result || 0) !== expectedRevision ||
+        count.result !== expectedCount
+      ) {
+        tx.customError = Error(
+          "Los datos cambiaron. Vuelve a revisar la cantidad y confirmar el borrado.",
+        );
+        tx.abort();
+        return;
+      }
+      store.clear();
+      settings.put((revision.result || 0) + 1, "dataRevision");
+      const old = prefs.result || backupDefaults();
+      settings.put(
+        {
+          ...old,
+          generation: old.generation + 1,
+          pausedAfterClear: true,
+          pending: true,
+          error: null,
+        },
+        "backupSettings",
+      );
+    };
+  });
 }

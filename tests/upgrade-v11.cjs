@@ -61,6 +61,14 @@ const baselineVersion = process.env.UPGRADE_VERSION || "V1.0";
   });
   const context = await browser.newContext();
   let page = await context.newPage();
+  const waitFor = async (predicate) => {
+    const deadline = Date.now() + 30000;
+    while (Date.now() < deadline) {
+      if (await page.evaluate(predicate)) return;
+      await new Promise((r) => setTimeout(r, 30));
+    }
+    throw Error("El Service Worker no completó el estado esperado");
+  };
   await page.goto(url);
   await page
     .getByRole("heading", {
@@ -70,7 +78,7 @@ const baselineVersion = process.env.UPGRADE_VERSION || "V1.0";
     .waitFor();
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
-  await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+  await waitFor(() => !!navigator.serviceWorker.controller);
   assert.equal(await page.locator(".version").innerText(), baselineVersion);
   const old = await page.evaluate(async () => {
     const db = await import("./js/storage/db.js"),
@@ -112,7 +120,7 @@ const baselineVersion = process.env.UPGRADE_VERSION || "V1.0";
   await page.evaluate(async () => {
     await (await navigator.serviceWorker.ready).update();
   });
-  await page.waitForFunction(
+  await waitFor(
     async () => !!(await navigator.serviceWorker.getRegistration()).waiting,
   );
   assert.equal(await page.locator(".version").innerText(), baselineVersion);
@@ -121,13 +129,17 @@ const baselineVersion = process.env.UPGRADE_VERSION || "V1.0";
   await page.goto(url);
   await page.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
   assert.equal(await page.locator(".version").innerText(), "V2.0");
-  await page.waitForFunction(async () => {
+  await waitFor(async () => {
     const registration = await navigator.serviceWorker.getRegistration();
     const keys = await caches.keys();
     return (
       !registration.waiting &&
       registration.active?.state === "activated" &&
-      keys.some((key) => key.endsWith(":v2.0.1"))
+      keys.some((key) => key.endsWith(":v2.1.0")) &&
+      keys.every(
+        (key) =>
+          !key.startsWith("mi-control-laboral:") || key.endsWith(":v2.1.0"),
+      )
     );
   });
   await page.reload();
