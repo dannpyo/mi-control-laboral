@@ -110,9 +110,9 @@ export function assessment(r, config, now = new Date()) {
             !r.closed ||
             r.officialEntry === "pending" ||
             r.officialExit === "pending"))),
-    hours:
+    workedMinutes:
       !future && r.entry && r.exit
-        ? Math.max(0, (minutes(r.exit) - minutes(r.entry)) / 60)
+        ? Math.max(0, minutes(r.exit) - minutes(r.entry))
         : 0,
   };
 }
@@ -125,54 +125,111 @@ export function fine(n, type) {
       ? 0
       : Math.min(5, n - 2);
 }
+// Derivados de solo lectura: no añaden campos ni migran registros de v1.0.
+export const isWork = (r) => ["normal", "holiday-work"].includes(r.type);
+export function applicableLinks(date, records, config, filter = "all") {
+  return config.links.filter(
+    (l) =>
+      (filter === "all" || filter === l.id) &&
+      (l.day === parseDate(date).getDay() ||
+        records.some((r) => r.date === date && r.link === l.id)),
+  );
+}
+export function calendarState(record, config, now = new Date()) {
+  if (!record) return "scheduled";
+  const a = assessment(record, config, now);
+  if (a.future)
+    return !["normal", "holiday-work", "pending"].includes(record.type)
+      ? "special"
+      : "scheduled";
+  if (record.type === "unjustified" || a.lateCount || a.earlyCount)
+    return "incident";
+  if (record.type === "pending") return "review";
+  if (!isWork(record)) return "special";
+  if (
+    record.entry &&
+    record.exit &&
+    record.closed &&
+    !a.pending &&
+    record.officialEntry === "marked" &&
+    record.officialExit === "marked"
+  )
+    return "validated";
+  return "review";
+}
+export function formatMinutes(total) {
+  if (!Number.isInteger(total))
+    throw Error("El tiempo debe expresarse en minutos enteros");
+  const absolute = Math.abs(total);
+  return `${total < 0 ? "−" : ""}${Math.floor(absolute / 60)} h ${String(absolute % 60).padStart(2, "0")} min`;
+}
 export function stats(records, config, link, p, now = new Date()) {
   const out = {
-    days: 0,
+    scheduled: 0,
+    complete: 0,
+    incomplete: 0,
+    closed: 0,
+    validated: 0,
+    exceptional: 0,
+    saved: 0,
     late: 0,
     early: 0,
     omissions: 0,
     pending: 0,
-    hours: 0,
+    personalMinutes: 0,
+    scheduledMinutes: 0,
+    comparableMinutes: 0,
+    deltaMinutes: null,
     absences: 0,
     unrecorded: 0,
   };
-  for (const r of records.filter(
+  const schedule = config.links.find((l) => l.id === link);
+  const rows = records.filter(
     (r) => r.link === link && r.date >= p.start && r.date <= p.end,
-  )) {
+  );
+  const known = new Map(rows.map((r) => [r.date, r]));
+  for (const r of rows) {
     const a = assessment(r, config, now);
     if (a.future) continue;
-    out.days++;
+    out.saved++;
+    out.closed += Number(r.closed);
+    out.validated += Number(calendarState(r, config, now) === "validated");
+    out.exceptional += Number(parseDate(r.date).getDay() !== schedule.day);
+    if (isWork(r)) {
+      if (r.entry && r.exit) {
+        out.complete++;
+        out.personalMinutes += a.workedMinutes;
+        out.comparableMinutes +=
+          minutes(r.schedule.end) - minutes(r.schedule.start);
+      } else out.incomplete++;
+    }
     out.late += a.lateCount;
     out.early += a.earlyCount;
     out.omissions += a.omissions;
-    out.pending += Number(a.pending);
-    out.hours += a.hours;
+    out.pending += Number(a.pending || (isWork(r) && (!r.entry || !r.exit)));
     out.absences += Number(r.type === "unjustified");
   }
-  // Las jornadas transcurridas sin registro se señalan para revisar, nunca como faltas.
-  const schedule = config.links.find((item) => item.id === link);
-  const known = new Set(
-    records.filter((r) => r.link === link).map((r) => r.date),
-  );
-  const cursor = parseDate(
-    p.start > config.startDate ? p.start : config.startDate,
-  );
-  const last = p.end < localDate(now) ? p.end : localDate(now);
-  for (; localDate(cursor) <= last; cursor.setDate(cursor.getDate() + 1)) {
-    const date = localDate(cursor);
-    if (
-      cursor.getDay() !== schedule.day ||
-      config.holidays.includes(date) ||
-      known.has(date)
-    )
+  // Programación del período completo; el inicio de seguimiento limita solo la revisión de vacíos.
+  const cursor = parseDate(p.start);
+  for (; localDate(cursor) <= p.end; cursor.setDate(cursor.getDate() + 1)) {
+    const date = localDate(cursor),
+      r = known.get(date);
+    if (cursor.getDay() !== schedule.day) continue;
+    if (r ? !isWork(r) && r.type !== "pending" : config.holidays.includes(date))
       continue;
+    out.scheduled++;
+    const expected = r?.schedule || schedule;
+    out.scheduledMinutes += minutes(expected.end) - minutes(expected.start);
+    if (r || date < config.startDate || date > localDate(now)) continue;
     if (
       date === localDate(now) &&
-      now.getHours() * 60 + now.getMinutes() < minutes(schedule.end)
+      now.getHours() * 60 + now.getMinutes() < minutes(expected.end)
     )
       continue;
     out.unrecorded++;
   }
+  if (out.complete)
+    out.deltaMinutes = out.personalMinutes - out.comparableMinutes;
   return out;
 }
 export function validDate(s) {

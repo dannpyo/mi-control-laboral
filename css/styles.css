@@ -631,3 +631,197 @@ section {
 .metrics {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+/* Correcciones móviles v1.1: indicadores por vínculo y resumen compacto. */
+.calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  margin: 12px 0;
+}
+.calendar-legend span {
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid #61766b;
+}
+.validated {
+  background: #28553a;
+  color: #dcffe7;
+}
+.review {
+  background: #665023;
+  color: #ffedb8;
+}
+.incident {
+  background: #6d302d;
+  color: #ffddd8;
+}
+.special {
+  background: #244c6a;
+  color: #d9efff;
+}
+.scheduled {
+  background: #26312c;
+  color: #d0d8d3;
+  border: 1px solid #82958a;
+}
+.day {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  gap: 5px;
+  min-height: 66px;
+  padding: 7px 1px;
+  background: #142119;
+  border: 1px solid #304639;
+}
+.day-markers {
+  display: flex;
+  gap: 2px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.link-marker {
+  font-size: 9px;
+  line-height: 16px;
+  min-width: 12px;
+  border-radius: 3px;
+  font-weight: 700;
+  padding: 0 1px;
+}
+.special-date {
+  color: #c9e7ff;
+  border-left: 3px solid #6eadd3;
+  padding: 10px;
+}
+.summary-card {
+  padding: 16px;
+  margin: 12px 0;
+}
+.summary-card h2 {
+  font-size: 16px;
+  margin: 0 0 12px;
+}
+.incidence-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.incidence {
+  padding: 10px 5px;
+  background: #102219;
+  border-radius: 8px;
+  text-align: center;
+}
+.incidence strong {
+  display: block;
+  font-size: 24px;
+  line-height: 1.2;
+}
+.incidence span {
+  display: block;
+  font-size: 10px;
+  line-height: 1.4;
+  margin-top: 5px;
+  color: #d0e3d5;
+}
+.incidence.warning {
+  outline: 1px solid #ddb96a;
+}
+.omission-balance {
+  font-size: 11px;
+  margin: 12px 0;
+}
+.compact-alert {
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 8px 0;
+  border-radius: 6px;
+}
+.compact-alert.preventive {
+  background: #4a3d21;
+  color: #ffe4a1;
+}
+.compact-alert.sanction {
+  background: #592e28;
+  color: #ffcdc1;
+}
+.summary-card details {
+  padding: 0;
+  border-top: 1px solid #476451;
+  margin-top: 12px;
+}
+.summary-card summary {
+  font-size: 12px;
+  padding: 13px 0 2px;
+  min-height: 40px;
+}
+.stat-list {
+  margin: 14px 0;
+  font-size: 12px;
+}
+.stat-list div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 9px 0;
+  border-bottom: 1px solid #30493a;
+}
+.stat-list dt {
+  flex: 1;
+}
+.stat-list dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 650;
+  max-width: 48%;
+}
+.estimate {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 7px 0;
+}
+.period-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 16px 0;
+}
+.period-picker div {
+  min-width: 0;
+  text-align: center;
+}
+.period-picker span {
+  display: block;
+  font-size: 10px;
+  color: #b4c7bb;
+  margin-bottom: 5px;
+}
+.period-picker strong {
+  font-size: 13px;
+}
+.period-picker button {
+  padding: 8px 13px;
+}
+.summary-cards {
+  margin-top: 8px;
+}
+@media (max-width: 360px) {
+  .link-marker {
+    font-size: 8px;
+    min-width: 10px;
+  }
+  .day-markers {
+    gap: 1px;
+  }
+  .incidence span {
+    font-size: 9px;
+  }
+  .period-picker strong {
+    font-size: 11px;
+  }
+}
