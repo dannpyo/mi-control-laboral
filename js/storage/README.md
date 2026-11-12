@@ -1,5 +1,7 @@
-# Almacenamiento futuro
+# Persistencia local v1
 
-Este directorio alojará el adaptador de IndexedDB. En esta etapa no se abre ninguna base ni se define un esquema laboral.
+`db.js` centraliza IndexedDB (`mi-control-laboral`, versión 1). `records` usa `AAAA-MM-DD|vínculo` como clave única y `settings` conserva la configuración.
 
-Al definir los requisitos: centralizar aquí apertura, migraciones versionadas y transacciones; los módulos de interfaz no accederán directamente a IndexedDB. Diseñar exportación e importación con validación de formato y versión, y respaldo descargable mediante acción explícita del usuario. No almacenar información personal en la caché del Service Worker. El almacenamiento del navegador puede borrarse y no equivale a una copia de seguridad.
+Las escrituras de jornadas guardan auditoría y verifican la revisión anterior dentro de la misma transacción. La importación JSON valida todo antes de escribir, agrega solamente claves inexistentes y restaura opcionalmente la configuración en esa misma transacción. Los duplicados existentes nunca se sobrescriben.
+
+Los datos personales no se guardan en el Service Worker ni se transmiten. El almacenamiento del navegador puede borrarse: usar las exportaciones JSON como copias de respaldo.

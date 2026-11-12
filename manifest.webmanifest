@@ -1,7 +1,7 @@
 {
   "name": "Mi Control Laboral",
   "short_name": "Mi Control",
-  "description": "Tu espacio personal para organizar tu jornada. Aplicación en desarrollo.",
+  "description": "Tu espacio personal para organizar tu jornada. Registro personal local.",
   "lang": "es",
   "start_url": "./",
   "scope": "./",
