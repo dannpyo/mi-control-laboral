@@ -6,18 +6,24 @@ const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 const assert = require("node:assert/strict");
 const root = path.resolve(__dirname, "..");
+const baselineCommit = process.env.UPGRADE_BASE || "e3e558e";
+const baselineVersion = process.env.UPGRADE_VERSION || "V1.0";
 (async () => {
   const baseline = {};
   for (const name of execFileSync(
     "git",
-    ["ls-tree", "-r", "--name-only", "e3e558e"],
+    ["ls-tree", "-r", "--name-only", baselineCommit],
     { cwd: root, encoding: "utf8" },
   )
     .trim()
     .split("\n"))
-    baseline[name] = execFileSync("git", ["show", `e3e558e:${name}`], {
-      cwd: root,
-    });
+    baseline[name] = execFileSync(
+      "git",
+      ["show", `${baselineCommit}:${name}`],
+      {
+        cwd: root,
+      },
+    );
   let upgraded = false;
   const types = {
     ".js": "text/javascript",
@@ -60,7 +66,7 @@ const root = path.resolve(__dirname, "..");
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
   await page.waitForFunction(() => !!navigator.serviceWorker.controller);
-  assert.equal(await page.locator(".version").innerText(), "V1.0");
+  assert.equal(await page.locator(".version").innerText(), baselineVersion);
   const old = await page.evaluate(async () => {
     const db = await import("./js/storage/db.js"),
       d = await import("./js/modules/domain.js");
@@ -104,12 +110,12 @@ const root = path.resolve(__dirname, "..");
   await page.waitForFunction(
     async () => !!(await navigator.serviceWorker.getRegistration()).waiting,
   );
-  assert.equal(await page.locator(".version").innerText(), "V1.0");
+  assert.equal(await page.locator(".version").innerText(), baselineVersion);
   await page.close();
   page = await context.newPage();
   await page.goto(url);
-  await page.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
-  assert.equal(await page.locator(".version").innerText(), "V1.1");
+  await page.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
+  assert.equal(await page.locator(".version").innerText(), "V2.0");
   const current = await page.evaluate(async () => {
     const db = await import("./js/storage/db.js");
     return {
@@ -136,7 +142,7 @@ const root = path.resolve(__dirname, "..");
   );
   await context.setOffline(true);
   await page.reload();
-  await page.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
+  await page.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
   await page.getByRole("button", { name: "Calendario", exact: true }).click();
   await page.locator("#month").fill("2026-11");
   await page.locator('[data-day="2026-11-04"]').click();
@@ -145,7 +151,7 @@ const root = path.resolve(__dirname, "..");
   const fresh = await browser.newContext();
   const p2 = await fresh.newPage();
   await p2.goto(url);
-  await p2.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
+  await p2.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
   const restored = await p2.evaluate(async (backup) => {
     const db = await import("./js/storage/db.js");
     const result = await db.importBackup(backup, true);
@@ -168,7 +174,7 @@ const root = path.resolve(__dirname, "..");
   await browser.close();
   await new Promise((r) => server.close(r));
   console.log(
-    "PASS: v1.0 → v1.1 conserva exactamente registros, configuración, historial y DB versión 1; JSON v1.0 compatible, duplicados conservados y lectura offline.",
+    "PASS: versión anterior → v2.0 conserva exactamente registros, configuración, historial y DB versión 1; JSON v1.0 compatible, duplicados conservados y lectura offline.",
   );
 })().catch((e) => {
   console.error(e);

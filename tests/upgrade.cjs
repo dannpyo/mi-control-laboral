@@ -65,7 +65,7 @@ const root = require("node:path").resolve(__dirname, "..");
   await page.waitForFunction(() => !!navigator.serviceWorker.controller);
   upgraded = true;
   await page.reload();
-  await page.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
+  await page.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
   assert.equal(
     await page.locator("nav").evaluate((el) => getComputedStyle(el).position),
     "fixed",
@@ -88,9 +88,9 @@ const root = require("node:path").resolve(__dirname, "..");
   await page.close();
   page = await ctx.newPage();
   await page.goto(url);
-  await page.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
+  await page.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
   await page.waitForFunction(async () =>
-    (await caches.keys()).some((k) => k.endsWith(":v1.1.0")),
+    (await caches.keys()).some((k) => k.endsWith(":v2.0.0")),
   );
   // Esperar la activación, no solo la existencia de la caché instalada.
   await page.waitForFunction(async () => {
@@ -103,7 +103,7 @@ const root = require("node:path").resolve(__dirname, "..");
   });
   await ctx.setOffline(true);
   await page.reload();
-  await page.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
+  await page.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
   assert.equal(
     await page.evaluate(
       async () =>
@@ -113,7 +113,7 @@ const root = require("node:path").resolve(__dirname, "..");
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: actualización real desde etapa 1 (SW v1), CSS/JS coherentes, activación al cerrar pestaña, conservación IndexedDB y recarga offline v1.1.0.",
+    "PASS: actualización real desde etapa 1 (SW v1), CSS/JS coherentes, activación al cerrar pestaña, conservación IndexedDB y recarga offline v2.0.0.",
   );
   await browser.close();
   await new Promise((r) => server.close(r));

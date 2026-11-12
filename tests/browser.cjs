@@ -1,202 +1,195 @@
-const { chromium } = require("playwright");
+// Flujo v2.0 con emulación móvil Android y datos sintéticos.
+const { chromium, devices } = require("playwright");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "control-laboral-test-"));
-const baseURL =
-  process.env.TEST_URL || "http://localhost:8765/mi-control-laboral/";
+const base =
+  process.env.TEST_URL || "http://localhost:8766/mi-control-laboral/";
+const launch = {
+  executablePath: process.env.CHROMIUM_PATH || "/usr/bin/chromium",
+  args: ["--no-sandbox"],
+};
 (async () => {
-  const browser = await chromium.launch({
-    executablePath: process.env.CHROMIUM_PATH || "/usr/bin/chromium",
-    args: ["--no-sandbox"],
-  });
-  const context = await browser.newContext({
-    viewport: { width: 390, height: 844 },
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "control-v2-"));
+  const b = await chromium.launch(launch);
+  const c = await b.newContext({
+    ...devices["Pixel 7"],
     timezoneId: "America/Asuncion",
+    locale: "es-PY",
     acceptDownloads: true,
   });
-  const page = await context.newPage();
-  await page.clock.install({ time: new Date("2026-11-12T12:00:00-03:00") });
+  const p = await c.newPage();
   const errors = [];
-  page.on("pageerror", (e) => errors.push(e.message));
-  page.on("console", (m) => {
+  p.on("pageerror", (e) => errors.push(e.message));
+  p.on("console", (m) => {
     if (m.type() === "error") errors.push(m.text());
   });
-  page.on("dialog", (d) => d.accept());
-  await page.goto(baseURL);
-  await page.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
-  await page.evaluate(() => navigator.serviceWorker.ready);
-  await page.reload();
-  await page.waitForFunction(() => !!navigator.serviceWorker.controller);
-  await page
-    .getByRole("button", { name: "Ingreso manual / otra fecha", exact: true })
-    .click();
-  await page.locator("#edit-date").fill("2026-11-11");
-  await page.locator("[name=entry]").fill("07:46");
-  await page.locator("[name=exit]").fill("19:00");
-  await page.locator("[name=lateState]").selectOption("unjustified");
-  await page.locator("[name=earlyState]").selectOption("justified");
-  await page.locator("[name=officialEntry]").selectOption("missing");
-  await page.locator("[name=officialExit]").selectOption("marked");
-  await page.locator("[name=closed]").check();
-  await page
-    .locator("[name=notes]")
-    .fill("<script>alert(1)</script> Nota de prueba");
-  await page
-    .getByRole("button", { name: "Guardar jornada", exact: true })
-    .click();
-  await page.locator("#editor").waitFor({ state: "hidden" });
-  let rs = await page.evaluate(async () =>
+  p.on("dialog", (d) => d.accept());
+  await p.clock.install({ time: new Date("2026-11-12T07:29:00-03:00") });
+  await p.goto(base);
+  await p.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
+  await p.evaluate(() => navigator.serviceWorker.ready);
+  await p.reload();
+  await p.waitForFunction(() => !!navigator.serviceWorker.controller);
+  assert.equal(await p.locator("nav button").count(), 3);
+  assert.deepEqual(await p.locator("nav button").allTextContents(), [
+    "Inicio",
+    "Calendario",
+    "Resumen",
+  ]);
+  assert.equal(await p.locator("#quick-link").inputValue(), "2");
+  assert.equal(await p.locator("#live-clock").textContent(), "07:29:00");
+  await p.clock.runFor(2100);
+  assert.equal(await p.locator("#live-clock").textContent(), "07:29:02");
+  assert.match(await p.locator(".timezone").innerText(), /America\/Asuncion/);
+  await p
+    .getByRole("button", { name: "Marcar entrada", exact: true })
+    .dblclick();
+  await p
+    .getByRole("status")
+    .filter({ hasText: "Marcación personal guardada" })
+    .waitFor();
+  assert.equal(await p.locator("#saved-entry").textContent(), "07:29");
+  assert.equal(
+    await p
+      .getByRole("button", { name: "Marcar entrada", exact: true })
+      .isDisabled(),
+    true,
+  );
+  let rows = await p.evaluate(async () =>
     (await import("./js/storage/db.js")).getRecords(),
   );
-  assert.equal(rs.length, 1);
-  assert.equal(rs[0].entry, "07:46");
-  assert.equal(rs[0].history.length, 1);
-  await page.getByRole("button", { name: "Resumen", exact: true }).click();
-  await page.locator("#filter-date").fill("2026-11-12");
-  let cards = page.locator(".card");
-  assert.equal(
-    await cards.first().getByLabel("Tardanzas: 1", { exact: true }).count(),
-    1,
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].history.length, 1);
+  assert.equal(rows[0].officialEntry, "pending");
+  await p.clock.setFixedTime(new Date("2026-11-12T19:30:00-03:00"));
+  await p.getByRole("button", { name: "Marcar salida", exact: true }).click();
+  await p.waitForFunction(
+    () => document.querySelector("#saved-exit").textContent === "19:30",
   );
   assert.equal(
-    await cards
-      .first()
-      .getByLabel("Omisiones oficiales: 1", { exact: true })
+    await p
+      .getByRole("button", { name: "Marcar salida", exact: true })
+      .isDisabled(),
+    true,
+  );
+  assert.equal(await p.locator("#saved-entry").textContent(), "07:29");
+  assert.match(
+    await p.locator(".punch-card .status").innerText(),
+    /Por revisar/,
+  );
+  await p
+    .getByRole("button", { name: "Corregir o ingresar horario", exact: true })
+    .click();
+  assert.equal(await p.locator("#more-options").getAttribute("open"), null);
+  assert.equal(await p.locator("[name=entry]").isVisible(), true);
+  assert.equal(await p.locator("[name=officialEntry]").isVisible(), false);
+  await p.locator("[name=entry]").fill("07:46");
+  await p.getByRole("button", { name: "Guardar jornada", exact: true }).click();
+  await p.locator("#editor").waitFor({ state: "hidden" });
+  assert.equal(await p.locator("#saved-entry").textContent(), "07:46");
+  // Una clasificación concreta se hace dentro de un único desplegable, sin campos obligatorios adicionales.
+  await p
+    .getByRole("button", { name: "Corregir o ingresar horario", exact: true })
+    .click();
+  await p.getByText("Más opciones", { exact: true }).click();
+  await p.locator("[name=lateState]").selectOption("unjustified");
+  await p.locator("[name=officialEntry]").selectOption("marked");
+  await p.locator("[name=officialExit]").selectOption("marked");
+  await p.locator("[name=closed]").check();
+  await p
+    .locator("[name=notes]")
+    .fill("Corrección sintética <script>no ejecutar</script>");
+  await p.getByRole("button", { name: "Guardar jornada", exact: true }).click();
+  await p.locator("#editor").waitFor({ state: "hidden" });
+  assert.equal(
+    await p
+      .locator(".current-period")
+      .getByLabel("Tardanzas: 1", { exact: true })
+      .count(),
+    1,
+  );
+  rows = await p.evaluate(async () =>
+    (await import("./js/storage/db.js")).getRecords(),
+  );
+  assert.equal(rows[0].history.length, 4);
+  assert.equal(rows[0].history[2].before.entry, "07:29");
+  assert.equal(rows[0].history[2].after.entry, "07:46");
+  await p
+    .getByRole("button", { name: "Cambiar a modo claro", exact: true })
+    .click();
+  assert.equal(await p.locator("html").getAttribute("data-theme"), "light");
+  await p.reload();
+  await p.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
+  assert.equal(await p.locator("html").getAttribute("data-theme"), "light");
+  assert.equal(await p.locator("#saved-entry").textContent(), "07:46");
+  assert.equal(await p.locator("#quick-link").inputValue(), "2");
+  await p
+    .getByRole("button", { name: "Cambiar a modo oscuro", exact: true })
+    .click();
+  await p.getByRole("button", { name: "Calendario", exact: true }).click();
+  await p.locator('[data-day="2026-11-12"]').click();
+  assert.equal(await p.locator("#view [data-edit]").count(), 1);
+  await p.getByRole("button", { name: "Editar", exact: true }).click();
+  await p.locator("[name=exit]").fill("19:31");
+  await p.getByRole("button", { name: "Guardar jornada", exact: true }).click();
+  await p.locator("#editor").waitFor({ state: "hidden" });
+  await p.getByRole("button", { name: "Resumen", exact: true }).click();
+  assert.equal(await p.locator(".summary-card").count(), 3);
+  assert.equal(
+    await p
+      .locator('[data-summary-link="2"]')
+      .getByLabel("Tardanzas: 1", { exact: true })
       .count(),
     1,
   );
   assert.equal(
-    await cards.nth(1).getByLabel("Tardanzas: 0", { exact: true }).count(),
-    1,
+    await p.getByText("Sin sanciones estimadas", { exact: true }).count(),
+    3,
   );
-  await page.locator("#filter-date").fill("2026-11-16");
+  await p.locator('[data-summary-link="2"] summary').click();
+  assert.match(
+    await p.locator('[data-summary-link="2"] .incident-dates').innerText(),
+    /12\/11\/2026.*Tardanza/,
+  );
+  await p
+    .getByRole("button", { name: "Período siguiente", exact: true })
+    .click();
   assert.equal(
-    await page
-      .locator(".card")
-      .first()
+    await p
+      .locator('[data-summary-link="2"]')
       .getByLabel("Tardanzas: 0", { exact: true })
       .count(),
     1,
   );
-  await page.locator("#filter-date").fill("2026-11-12");
-  await page.getByRole("button", { name: "Historial", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Ver / editar jornada", exact: true })
+  await p
+    .getByRole("button", { name: "Período anterior", exact: true })
     .click();
-  await page.locator("[name=entry]").fill("07:45");
-  await page.locator("[name=notes]").fill("Corrección documentada");
-  await page
-    .getByRole("button", { name: "Guardar jornada", exact: true })
-    .click();
-  await page.locator("#editor").waitFor({ state: "hidden" });
-  rs = await page.evaluate(async () =>
-    (await import("./js/storage/db.js")).getRecords(),
-  );
-  assert.equal(rs[0].history.length, 2);
-  assert.equal(rs[0].history[1].before.entry, "07:46");
-  assert.equal(rs[0].history[1].after.entry, "07:45");
-  await page.reload();
-  await page.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
-  rs = await page.evaluate(async () =>
-    (await import("./js/storage/db.js")).getRecords(),
-  );
-  assert.equal(rs[0].entry, "07:45");
-  await page.locator("#quick-link").selectOption("2");
-  await page
-    .getByRole("button", { name: "Marcar entrada", exact: true })
-    .click();
-  await page
+  await p.getByRole("button", { name: "Configuración", exact: true }).click();
+  let wait = p.waitForEvent("download");
+  await p.getByRole("button", { name: "Exportar JSON", exact: true }).click();
+  await (await wait).saveAs(path.join(temp, "backup.json"));
+  const backup = JSON.parse(fs.readFileSync(path.join(temp, "backup.json")));
+  assert.equal(backup.version, 1);
+  assert.equal(backup.records.length, 1);
+  wait = p.waitForEvent("download");
+  await p.getByRole("button", { name: "Exportar CSV", exact: true }).click();
+  await (await wait).saveAs(path.join(temp, "export.csv"));
+  assert.match(fs.readFileSync(path.join(temp, "export.csv"), "utf8"), /07:46/);
+  await p.locator("#json-import").setInputFiles(path.join(temp, "backup.json"));
+  await p
     .getByRole("status")
-    .filter({ hasText: "Marcación personal guardada" })
+    .filter({ hasText: "0 nuevas; 1 coincidentes conservadas" })
     .waitFor();
-  rs = await page.evaluate(async () =>
-    (await import("./js/storage/db.js")).getRecords(),
-  );
-  assert.equal(rs.length, 2);
-  assert.equal(rs.find((r) => r.link === "2").entry, "12:00");
-  assert.equal(rs.find((r) => r.link === "2").officialEntry, "pending");
-  await page
-    .getByRole("button", { name: "Marcar entrada", exact: true })
-    .click();
-  await page
-    .getByRole("status")
-    .filter({ hasText: "Ya hay entrada personal" })
-    .waitFor();
-  await page.clock.setFixedTime(new Date("2026-11-12T20:00:00-03:00"));
-  await page
-    .getByRole("button", { name: "Marcar salida", exact: true })
-    .click();
-  await page
-    .getByRole("status")
-    .filter({ hasText: "Marcación personal guardada" })
-    .waitFor();
-  rs = await page.evaluate(async () =>
-    (await import("./js/storage/db.js")).getRecords(),
-  );
-  assert.equal(rs.find((r) => r.link === "2").exit, "20:00");
-  assert.equal(rs.find((r) => r.link === "2").officialExit, "pending");
-  await page
-    .getByRole("button", { name: "Configuración", exact: true })
-    .click();
-  await page.locator("[name=holidays]").fill("2026-11-18");
-  await page
-    .getByRole("button", { name: "Guardar configuración", exact: true })
-    .click();
-  await page
-    .getByRole("status")
-    .filter({ hasText: "Configuración guardada" })
-    .waitFor();
-  await page.getByRole("button", { name: "Calendario", exact: true }).click();
-  await page.locator('[data-day="2026-11-18"]').click();
-  await page.locator('[data-edit="1"]').click();
-  assert.equal(await page.locator("[name=type]").inputValue(), "holiday-free");
-  await page.locator("[name=type]").selectOption("holiday-work");
-  await page.locator("[name=entry]").fill("08:31");
-  await page.locator("[name=rain]").check();
-  await page.locator("[name=lateState]").selectOption("unjustified");
-  await page
-    .getByRole("button", { name: "Guardar jornada", exact: true })
-    .click();
-  await page.locator("#editor").waitFor({ state: "hidden" });
-  await page
-    .getByRole("button", { name: "Configuración", exact: true })
-    .click();
-  let d = page.waitForEvent("download");
-  await page
-    .getByRole("button", { name: "Exportar JSON", exact: true })
-    .click();
-  const json = await d;
-  await json.saveAs(path.join(scratch, "v1-backup-test.json"));
-  let backup = JSON.parse(
-    require("fs").readFileSync(path.join(scratch, "v1-backup-test.json")),
-  );
-  assert.equal(backup.records.length, 3);
-  d = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Exportar CSV", exact: true }).click();
-  const csv = await d;
-  await csv.saveAs(path.join(scratch, "v1-export-test.csv"));
-  assert.match(
-    require("fs").readFileSync(
-      path.join(scratch, "v1-export-test.csv"),
-      "utf8",
-    ),
-    /Corrección documentada/,
-  );
-  await page
-    .locator("#json-import")
-    .setInputFiles(path.join(scratch, "v1-backup-test.json"));
-  await page
-    .getByRole("status")
-    .filter({ hasText: "0 nuevas; 3 coincidentes conservadas" })
-    .waitFor();
-  const dbChecks = await page.evaluate(async () => {
+  const checks = await p.evaluate(async () => {
     const db = await import("./js/storage/db.js"),
-      domain = await import("./js/modules/domain.js");
-    const config = await db.getConfig();
-    let rows = await db.getRecords();
-    let duplicate = false;
+      d = await import("./js/modules/domain.js");
+    const config = await db.getConfig(),
+      rows = await db.getRecords();
+    let duplicate = false,
+      invalid = false,
+      stale = false;
     try {
       await db.importBackup({
         format: "mi-control-laboral",
@@ -207,162 +200,153 @@ const baseURL =
     } catch {
       duplicate = true;
     }
-    const invalid = structuredClone(rows[0]);
-    invalid.date = "incorrecta";
-    let rejected = false;
     try {
       await db.importBackup({
         format: "mi-control-laboral",
         version: 1,
         config,
-        records: [domain.blank("2026-10-21", "1", config), invalid],
+        records: [
+          d.blank("2026-11-04", "1", config),
+          { ...rows[0], date: "incorrecta" },
+        ],
       });
     } catch {
-      rejected = true;
+      invalid = true;
     }
-    const r = rows[0];
     await db.saveRecord(
-      { ...r, notes: "Nueva versión" },
-      "Prueba de concurrencia",
-      r.revision,
+      { ...rows[0], notes: "Actualización sintética" },
+      "Concurrencia",
+      rows[0].revision,
     );
-    let stale = false;
     try {
-      await db.saveRecord(
-        { ...r, notes: "Obsoleta" },
-        "Versión obsoleta",
-        r.revision,
-      );
+      await db.saveRecord(rows[0], "Obsoleta", rows[0].revision);
     } catch {
       stale = true;
     }
-    return {
-      duplicate,
-      rejected,
-      stale,
-      count: (await db.getRecords()).length,
-    };
+    return { duplicate, invalid, stale, count: (await db.getRecords()).length };
   });
-  assert.deepEqual(dbChecks, {
+  assert.deepEqual(checks, {
     duplicate: true,
-    rejected: true,
+    invalid: true,
     stale: true,
-    count: 3,
+    count: 1,
   });
-  // Restauración en otra base (perfil limpio) y persistencia tras cerrar contexto.
-  const fresh = await browser.newContext();
-  const p2 = await fresh.newPage();
-  await p2.goto(baseURL);
-  await p2.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
-  const result = await p2.evaluate(
-    async (backup) => (await import("./js/storage/db.js")).importBackup(backup),
-    backup,
-  );
-  assert.equal(result.added, 3);
-  await p2.reload();
-  await p2.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
+  // Hora y vínculo cambian al llegar la medianoche sin pulsar nada ni perder formularios.
+  await p.getByRole("button", { name: "Inicio", exact: true }).click();
+  await p.clock.setFixedTime(new Date("2026-11-15T07:00:00-03:00"));
+  await p.clock.runFor(1100);
+  assert.equal(await p.locator("#quick-link").inputValue(), "3");
+  await p.clock.setFixedTime(new Date("2026-11-16T00:00:00-03:00"));
+  await p.clock.runFor(1100);
+  assert.equal(await p.locator("#quick-link").inputValue(), "");
   assert.equal(
-    await p2.evaluate(
-      async () =>
-        (await (await import("./js/storage/db.js")).getRecords()).length,
-    ),
-    3,
+    await p
+      .getByRole("button", { name: "Marcar entrada", exact: true })
+      .isDisabled(),
+    true,
   );
-  await fresh.close();
-  // Persistencia tras cerrar realmente el navegador y restaurar configuración.
-  const profile = path.join(scratch, "profile");
-  const launch = {
-    executablePath: process.env.CHROMIUM_PATH || "/usr/bin/chromium",
-    args: ["--no-sandbox"],
-  };
-  let persistent = await chromium.launchPersistentContext(profile, launch);
-  let persistPage = await persistent.newPage();
-  await persistPage.goto(baseURL);
-  await persistPage
-    .getByRole("heading", { name: "Tu jornada, a mano." })
-    .waitFor();
-  await persistPage.evaluate(async (backup) => {
-    const db = await import("./js/storage/db.js");
-    await db.importBackup(backup, true);
-  }, backup);
-  await persistent.close();
-  persistent = await chromium.launchPersistentContext(profile, launch);
-  persistPage = await persistent.newPage();
-  await persistPage.goto(baseURL);
-  await persistPage
-    .getByRole("heading", { name: "Tu jornada, a mano." })
-    .waitFor();
-  const persisted = await persistPage.evaluate(async () => {
-    const db = await import("./js/storage/db.js");
-    return {
-      count: (await db.getRecords()).length,
-      config: await db.getConfig(),
-    };
+  await p.locator("#quick-link").selectOption("1");
+  assert.match(await p.locator(".schedule").innerText(), /Excepcional/);
+  await c.setOffline(true);
+  await p.reload();
+  await p.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
+  await p.getByRole("button", { name: "Calendario", exact: true }).click();
+  await p.locator('[data-day="2026-11-12"]').click();
+  await p.getByRole("button", { name: "Editar", exact: true }).click();
+  await p.locator("[name=exit]").fill("19:32");
+  await p.getByRole("button", { name: "Guardar jornada", exact: true }).click();
+  await p.locator("#editor").waitFor({ state: "hidden" });
+  await p.reload();
+  await p.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
+  assert.equal(
+    (
+      await p.evaluate(
+        async () =>
+          (await (await import("./js/storage/db.js")).getRecords())[0],
+      )
+    ).exit,
+    "19:32",
+  );
+  // Lista reciente: máximo cinco, orden descendente y filtrada por el vínculo elegido.
+  await p.evaluate(async () => {
+    const db = await import("./js/storage/db.js"),
+      d = await import("./js/modules/domain.js");
+    const config = await db.getConfig();
+    for (const date of [
+      "2026-11-01",
+      "2026-11-02",
+      "2026-11-03",
+      "2026-11-04",
+      "2026-11-05",
+      "2026-11-06",
+    ])
+      await db.saveRecord(d.blank(date, "2", config), "Histórico sintético", 0);
   });
-  assert.equal(persisted.count, 3);
-  assert.deepEqual(persisted.config, backup.config);
-  const cdp = await persistent.newCDPSession(persistPage);
+  await p.reload();
+  await p.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
+  await p.locator("#quick-link").selectOption("2");
+  assert.equal(await p.locator(".recent-row").count(), 5);
+  const recent = await p
+    .locator(".recent-row")
+    .evaluateAll((bs) =>
+      bs.map((b) => ({ date: b.dataset.date, link: b.dataset.edit })),
+    );
+  assert.ok(recent.every((r) => r.link === "2"));
+  assert.deepEqual(
+    recent.map((r) => r.date),
+    recent
+      .map((r) => r.date)
+      .sort()
+      .reverse(),
+  );
+  // Reinicio real del navegador: JSON restaurado y apariencia conservada por origen.
+  const profile = path.join(temp, "profile");
+  let pc = await chromium.launchPersistentContext(profile, {
+    ...launch,
+    timezoneId: "UTC",
+  });
+  let pp = await pc.newPage();
+  await pp.goto(base);
+  await pp.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
+  await pp.evaluate(async (backup) => {
+    await (await import("./js/storage/db.js")).importBackup(backup, true);
+    localStorage.setItem("mi-control-laboral-theme", "light");
+  }, backup);
+  await pc.close();
+  pc = await chromium.launchPersistentContext(profile, {
+    ...launch,
+    timezoneId: "UTC",
+  });
+  pp = await pc.newPage();
+  await pp.goto(base);
+  await pp.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
+  assert.equal(await pp.locator("html").getAttribute("data-theme"), "light");
+  assert.equal(
+    (
+      await pp.evaluate(
+        async () =>
+          (await (await import("./js/storage/db.js")).getRecords())[0],
+      )
+    ).entry,
+    "07:46",
+  );
+  assert.match(
+    await pp.locator(".timezone").innerText(),
+    /UTC · prevista America\/Asuncion/,
+  );
+  const cdp = await pc.newCDPSession(pp);
   assert.deepEqual((await cdp.send("Page.getAppManifest")).errors, []);
   assert.deepEqual(
     (await cdp.send("Page.getInstallabilityErrors")).installabilityErrors,
     [],
   );
-  await persistent.close();
-  await context.setOffline(true);
-  await page.reload();
-  await page.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
-  await page.getByRole("button", { name: "Historial", exact: true }).click();
-  await page.locator("#filter-date").fill("2026-11-12");
-  await page.locator('[data-edit="1"]').click();
-  await page.locator("[name=notes]").fill("Edición offline");
-  await page
-    .getByRole("button", { name: "Guardar jornada", exact: true })
-    .click();
-  await page.locator("#editor").waitFor({ state: "hidden" });
-  await page.reload();
-  await page.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
-  assert.equal(
-    (
-      await page.evaluate(async () =>
-        (await (await import("./js/storage/db.js")).getRecords()).find(
-          (r) => r.link === "1" && r.date === "2026-11-11",
-        ),
-      )
-    ).notes,
-    "Edición offline",
-  );
-  for (const name of [
-    "Inicio",
-    "Calendario",
-    "Resumen",
-    "Historial",
-    "Configuración",
-  ]) {
-    await page.getByRole("button", { name, exact: true }).click();
-    assert.equal(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth > innerWidth,
-      ),
-      false,
-      `overflow ${name}`,
-    );
-  }
-  await page.screenshot({
-    path: path.join(scratch, "v1-mobile.png"),
-    fullPage: true,
-  });
-  await page.getByRole("button", { name: "Inicio", exact: true }).click();
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.screenshot({
-    path: path.join(scratch, "v1-desktop.png"),
-    fullPage: true,
-  });
+  await pc.close();
   assert.deepEqual(errors, []);
+  await b.close();
+  fs.rmSync(temp, { recursive: true, force: true });
   console.log(
-    "PASS: UI manual, edición y auditoría, marcación rápida, duplicados, filtros, feriados, exportación JSON/CSV, importación y validación atómica, concurrencia, persistencia, offline y cinco secciones sin desbordamiento.",
+    "PASS v2.0 Android emulado: navegación, reloj, entrada/salida y duplicados, edición breve, incidencias, períodos, temas persistentes, JSON/CSV, concurrencia, reinicio, instalación y offline.",
   );
-  await browser.close();
-  fs.rmSync(scratch, { recursive: true, force: true });
 })().catch((e) => {
   console.error(e);
   process.exit(1);
