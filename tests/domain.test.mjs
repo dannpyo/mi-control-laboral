@@ -94,7 +94,7 @@ test("cómputo automático salvo justificación, incluidos estados pendientes he
     assert.equal(a.pending, false);
   }
 });
-test("omisión oficial explícita, solo al cerrar y después de la salida", () => {
+test("doble omisión heredada explícita, solo después de superar la salida", () => {
   assert.equal(
     assessment(record({ entry: "", exit: "" }), config, now).omissions,
     0,
@@ -112,7 +112,7 @@ test("omisión oficial explícita, solo al cerrar y después de la salida", () =
     0,
   );
   assert.equal(
-    assessment(r, config, new Date("2026-11-11T19:30:00")).omissions,
+    assessment(r, config, new Date("2026-11-11T19:30:01")).omissions,
     2,
   );
 });
@@ -165,7 +165,6 @@ test("situaciones exentas no generan incidencias; ausencia injustificada explíc
     "justified",
     "unjustified",
     "swap",
-    "pending",
   ]) {
     const a = assessment(
       record({

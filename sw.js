@@ -1,13 +1,13 @@
 // Cambiar VERSION al modificar cualquier archivo del shell.
-const VERSION = "v2.1.0";
+const VERSION = "v2.2.0";
 // Aísla las cachés de esta ruta de otras PWA del mismo dominio.
 const PREFIX = `mi-control-laboral:${self.registration.scope}:`;
 const CACHE = `${PREFIX}${VERSION}`;
 const SHELL = [
   "./",
   "./index.html",
-  "./css/styles.css?v=2.1.0",
-  "./js/app.js?v=2.1.0",
+  "./css/styles.css?v=2.2.0",
+  "./js/app.js?v=2.2.0",
   "./js/modules/domain.js",
   "./js/modules/presentation.js",
   "./js/storage/db.js",

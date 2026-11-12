@@ -135,10 +135,10 @@ const baselineVersion = process.env.UPGRADE_VERSION || "V1.0";
     return (
       !registration.waiting &&
       registration.active?.state === "activated" &&
-      keys.some((key) => key.endsWith(":v2.1.0")) &&
+      keys.some((key) => key.endsWith(":v2.2.0")) &&
       keys.every(
         (key) =>
-          !key.startsWith("mi-control-laboral:") || key.endsWith(":v2.1.0"),
+          !key.startsWith("mi-control-laboral:") || key.endsWith(":v2.2.0"),
       )
     );
   });

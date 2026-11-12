@@ -271,6 +271,12 @@ const base =
       "Prueba",
       r.revision,
     );
+    const d = await import("./js/modules/domain.js");
+    await db.saveRecord(
+      { ...d.blank("2026-11-05", "2", await db.getConfig()), entry: "07:30" },
+      "Omisión histórica",
+      0,
+    );
   });
   await dlg.locator("#clear-word").fill("BORRAR");
   await dlg
@@ -350,7 +356,7 @@ const base =
     for (const label of [
       "Tardanzas: 0",
       "Salidas anticipadas: 0",
-      "Omisiones oficiales: 0",
+      "Omisiones de marcación: 0",
     ])
       assert.equal(
         await p
