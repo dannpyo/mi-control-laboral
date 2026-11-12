@@ -1,0 +1,17 @@
+# Herramientas y sistema
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+node_modules/
+coverage/
+test-results/
+playwright-report/
+*.log
+__pycache__/
+# Secretos y copias personales
+.env
+.env.*
+!.env.example
+backups/
+exports/
