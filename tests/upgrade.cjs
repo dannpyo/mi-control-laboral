@@ -90,8 +90,17 @@ const root = require("node:path").resolve(__dirname, "..");
   await page.goto(url);
   await page.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
   await page.waitForFunction(async () =>
-    (await caches.keys()).some((k) => k.endsWith(":v1.0.0")),
+    (await caches.keys()).some((k) => k.endsWith(":v1.1.0")),
   );
+  // Esperar la activación, no solo la existencia de la caché instalada.
+  await page.waitForFunction(async () => {
+    const registration = await navigator.serviceWorker.getRegistration();
+    return (
+      !registration.waiting &&
+      registration.active?.state === "activated" &&
+      !(await caches.keys()).some((key) => key.endsWith(":v1"))
+    );
+  });
   await ctx.setOffline(true);
   await page.reload();
   await page.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
@@ -104,7 +113,7 @@ const root = require("node:path").resolve(__dirname, "..");
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: actualización real desde etapa 1 (SW v1), CSS/JS coherentes, activación al cerrar pestaña, conservación IndexedDB y recarga offline v1.0.0.",
+    "PASS: actualización real desde etapa 1 (SW v1), CSS/JS coherentes, activación al cerrar pestaña, conservación IndexedDB y recarga offline v1.1.0.",
   );
   await browser.close();
   await new Promise((r) => server.close(r));

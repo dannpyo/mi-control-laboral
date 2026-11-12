@@ -1,4 +1,8 @@
 import {
+  isWork,
+  applicableLinks,
+  calendarState,
+  formatMinutes,
   TYPES,
   localDate,
   parseDate,
@@ -49,6 +53,7 @@ let config,
   selectedDate = localDate(),
   month = localDate().slice(0, 7),
   filterLink = "all",
+  calendarLink = "all",
   filterDate = localDate(),
   editing = null,
   busy = false;
@@ -73,24 +78,27 @@ const linkName = (id) => config.links.find((l) => l.id === id).name;
 const recordFor = (date, id) => records.find((r) => r.id === key(date, id));
 const badge = (r) => {
   const a = assessment(r, config);
-  if (a.future) return "Programada";
-  if (r.type !== "normal") return TYPES[r.type];
+  if (a.future) return `${TYPES[r.type]} · fecha futura`;
+  if (!isWork(r)) return TYPES[r.type];
   return (
     [
+      r.type === "holiday-work" ? "Feriado trabajado" : "",
+      !r.entry || !r.exit ? "Marcaciones personales incompletas" : "",
       a.late ? "Llegada tardía" : "",
       a.early ? "Salida anticipada" : "",
-      a.omissions ? `${a.omissions} omisión(es)` : "",
+      a.omissions ? `${a.omissions} omisión(es) oficial(es) confirmada(s)` : "",
       a.pending ? "Pendiente de revisión" : "",
+      calendarState(r, config) === "validated" ? "Completa y validada" : "",
     ]
       .filter(Boolean)
-      .join(" · ") || "Sin incidencias detectadas"
+      .join(" · ") || "Requiere revisión"
   );
 };
 function recordCard(date, id) {
   const r = recordFor(date, id),
     l = config.links.find((l) => l.id === id),
     s = r?.schedule || l;
-  return `<article class="card"><div class="card-top"><h3>${esc(l.name)}</h3><span class="tag">${esc(s.start)}–${esc(s.end)}</span></div><p>${dateLabel(date)} · ${esc(r ? badge(r) : config.holidays.includes(date) ? "Feriado libre" : "Sin registro personal · pendiente")}</p><p class="times">Entrada <strong>${esc(r?.entry || "—")}</strong> <span>Salida <strong>${esc(r?.exit || "—")}</strong></span></p><button data-edit="${esc(id)}" data-date="${date}">${r ? "Ver / editar jornada" : "Registrar jornada"}</button></article>`;
+  return `<article class="card"><div class="card-top"><h3>${esc(l.name)}</h3><span class="tag">${esc(s.start)}–${esc(s.end)}</span></div><p>${dateLabel(date)}${l.day !== parseDate(date).getDay() ? " · Jornada excepcional" : ""} · ${esc(r ? badge(r) : config.holidays.includes(date) ? "Feriado libre" : "Jornada programada · sin registro personal")}</p><p class="times">Entrada <strong>${esc(r?.entry || "—")}</strong> <span>Salida <strong>${esc(r?.exit || "—")}</strong></span></p><button data-edit="${esc(id)}" data-date="${date}">${r ? "Ver / editar jornada" : "Registrar jornada"}</button></article>`;
 }
 function nextShift() {
   const today = localDate();
@@ -139,73 +147,108 @@ function home() {
 }
 function calendar() {
   const first = parseDate(`${month}-01`),
-    count = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate(),
-    today = localDate();
-  let cells = Array(first.getDay()).fill("<span></span>");
+    count = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  const linksForDate = (d) => applicableLinks(d, records, config, calendarLink);
+  const cells = Array(first.getDay()).fill("<span></span>");
   for (let n = 1; n <= count; n++) {
-    const d = `${month}-${String(n).padStart(2, "0")}`,
-      rs = records.filter((r) => r.date === d),
-      isScheduled =
-        d >= config.startDate &&
-        config.links.some((l) => l.day === parseDate(d).getDay()),
-      holiday = config.holidays.includes(d);
-    const indicators = rs.map((r) => {
-      const a = assessment(r, config);
-      return a.future
-        ? "future"
-        : a.lateCount || a.earlyCount || a.omissions || r.type === "unjustified"
-          ? "incident"
-          : a.pending
-            ? "review"
-            : "recorded";
+    const date = `${month}-${String(n).padStart(2, "0")}`;
+    const links = linksForDate(date);
+    const descriptions = links.map((l) => {
+      const r = recordFor(date, l.id);
+      return `${l.name}: ${r ? badge(r) : config.holidays.includes(date) ? "Feriado libre" : "Programada sin registro"}`;
     });
-    let kind =
-      d > today
-        ? isScheduled
-          ? "scheduled"
-          : ""
-        : indicators.includes("incident")
-          ? "incident"
-          : indicators.includes("review")
-            ? "review"
-            : rs.length
-              ? "recorded"
-              : holiday
-                ? "holiday"
-                : isScheduled
-                  ? "scheduled"
-                  : "";
+    const markers = links
+      .map((l) => {
+        const r = recordFor(date, l.id),
+          state = r
+            ? calendarState(r, config)
+            : config.holidays.includes(date)
+              ? "special"
+              : "scheduled";
+        return `<span class="link-marker ${state}" data-link="${l.id}" aria-hidden="true">V${l.id}</span>`;
+      })
+      .join("");
     cells.push(
-      `<button class="day ${kind} ${d === selectedDate ? "selected" : ""}" data-day="${d}" aria-label="${dateLabel(d)}${d === today ? ", hoy" : ""}: ${esc(rs.map((r) => badge(r)).join(", ") || (holiday ? "Feriado libre" : isScheduled ? "Programada, sin registro" : "Sin jornada"))}" ${d === selectedDate ? 'aria-pressed="true"' : ""}>${n}${d === today ? '<span class="today">•</span>' : ""}</button>`,
+      `<button class="day ${date === selectedDate ? "selected" : ""}" data-day="${date}" aria-pressed="${date === selectedDate}" aria-label="${dateLabel(date)}${date === localDate() ? ", hoy" : ""}: ${esc(descriptions.join("; ") || "Sin jornada")}"><span>${n}${date === localDate() ? " •" : ""}</span><span class="day-markers">${markers}</span></button>`,
     );
   }
-  return `<h1>Calendario</h1><label>Mes<input type="month" id="month" value="${month}" required></label><p class="legend">● Verde: registro / feriado · Ámbar: pendiente · Rojo: incidencia · Borde: programada. El futuro no genera faltas.</p><div class="calendar">${days.map((d) => `<span class="weekday">${d.slice(0, 2)}</span>`).join("")}${cells.join("")}</div><h2>${dateLabel(selectedDate)}</h2>${config.links.map((l) => recordCard(selectedDate, l.id)).join("")}`;
+  const selected = linksForDate(selectedDate);
+  return `<h1>Calendario</h1><div class="filters"><label>Mes<input type="month" id="month" value="${month}" required></label><label>Vínculo del calendario<select id="calendar-link"><option value="all">Todos</option>${config.links.map((l) => `<option value="${l.id}" ${calendarLink === l.id ? "selected" : ""}>${esc(l.name)}</option>`).join("")}</select></label></div>
+    <div class="calendar-legend" aria-label="Leyenda"><span class="validated">Completa y validada</span><span class="review">Completar / revisar</span><span class="incident">Injustificada confirmada</span><span class="scheduled">Programada sin registro</span><span class="special">Feriado / situación especial</span></div>
+    <p class="muted">V1, V2 y V3 identifican cada vínculo. Las fechas futuras no generan faltas.</p>
+    <div class="calendar">${days.map((d) => `<span class="weekday">${d.slice(0, 2)}</span>`).join("")}${cells.join("")}</div>
+    <h2>${dateLabel(selectedDate)}</h2>${config.holidays.includes(selectedDate) ? '<p class="special-date">Feriado: libre salvo excepción registrada.</p>' : ""}
+    ${selected.length ? selected.map((l) => recordCard(selectedDate, l.id)).join("") : '<p class="empty">Sin jornada programada ni excepcional para esta selección.</p>'}
+    <button id="exceptional" class="secondary">Registrar jornada excepcional</button>
+    <div id="exceptional-picker" hidden><label>Vínculo para esta fecha<select id="exceptional-link">${config.links.map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join("")}</select></label><button id="open-exceptional">Abrir jornada seleccionada</button><p class="muted">Solo se guarda esta fecha; no cambia la programación permanente.</p></div>`;
 }
 function filters() {
   return `<div class="filters"><label>Fecha del período<input type="date" id="filter-date" value="${filterDate}" required></label><label>Vínculo<select id="filter-link"><option value="all">Todos</option>${config.links.map((l) => `<option value="${l.id}" ${l.id === filterLink ? "selected" : ""}>${esc(l.name)}</option>`).join("")}</select></label></div>`;
 }
 function summary() {
   const p = period(filterDate);
-  return `<h1>Resumen</h1>${filters()}<p class="period">${dateLabel(p.start)} al ${dateLabel(p.end)}, inclusive</p><p class="muted">Los períodos se calculan por fecha: el día 16 empieza uno nuevo sin borrar registros. Solo se cuentan incidencias injustificadas; las pendientes se muestran aparte. Las jornadas sin registro desde el inicio del seguimiento requieren revisión y no se consideran ausencias.</p>${config.links
+  const cards = config.links
     .filter((l) => filterLink === "all" || filterLink === l.id)
     .map((l) => {
       const s = stats(records, config, l.id, p);
-      return `<article class="card"><h2>${esc(l.name)}</h2><div class="metrics"><div><strong>${s.days}</strong>Jornadas registradas</div><div><strong>${s.hours.toFixed(2)}</strong>Horas personales</div><div><strong>${s.pending}</strong>Pendientes</div><div><strong>${s.absences}</strong>Ausencias injustificadas</div><div><strong>${s.unrecorded}</strong>Jornadas sin registro (revisar)</div></div>${[
+      const incidents = [
         ["Tardanzas", s.late, "late"],
         ["Salidas anticipadas", s.early, "early"],
         ["Omisiones oficiales", s.omissions, "omission"],
+      ];
+      const alerts = incidents
+        .filter(([, n]) => n >= 2)
+        .map(([label, n, type]) => {
+          const sanction = fine(n, type),
+            threshold = typeof sanction === "string" || sanction > 0;
+          return `<p class="compact-alert ${threshold ? "sanction" : "preventive"}">${esc(label)}: ${threshold ? `umbral sancionable · ${typeof sanction === "number" ? `${sanction} día(s) estimado(s)` : sanction}` : "alerta preventiva desde la segunda incidencia"}.</p>`;
+        })
+        .join("");
+      return `<article class="card summary-card" data-summary-link="${l.id}"><h2>${esc(l.name)}</h2><div class="incidence-grid">${incidents.map(([label, n, type]) => `<div class="incidence ${n >= 2 ? "warning" : ""}" aria-label="${label}: ${n}"><strong>${n}</strong><span>${label}</span></div>`).join("")}</div>
+      <p class="omission-balance">Saldo de omisión permitida: <strong>${Math.max(0, 1 - s.omissions)}/1</strong> disponible · ${Math.min(1, s.omissions)}/1 utilizada</p>${alerts}
+      <details><summary>Ver estadísticas completas</summary><dl class="stat-list">
+      ${[
+        ["Jornadas programadas del período", s.scheduled],
+        ["Con entrada y salida completas", s.complete],
+        ["Con marcaciones incompletas (incluye vacías)", s.incomplete],
+        ["Cerradas por ti (pueden estar incompletas)", s.closed],
+        ["Completas y validadas", s.validated],
+        ["Excepcionales registradas", s.exceptional],
+        ["Sin registro que requieren revisión", s.unrecorded],
+        ["Registros pendientes de completar / revisar", s.pending],
+        ["Ausencias injustificadas explícitas", s.absences],
+        ["Horas programadas del período", formatMinutes(s.scheduledMinutes)],
+        [
+          "Horas personales en jornadas completas",
+          formatMinutes(s.personalMinutes),
+        ],
+        [
+          "Horario previsto de esas jornadas completas",
+          s.complete
+            ? formatMinutes(s.comparableMinutes)
+            : "Sin jornadas completas",
+        ],
+        [
+          "Diferencia en jornadas completas",
+          s.deltaMinutes === null
+            ? "Sin información completa"
+            : `${s.deltaMinutes > 0 ? "+" : ""}${formatMinutes(s.deltaMinutes)}`,
+        ],
       ]
         .map(
-          ([name, n, t]) =>
-            `<div class="rule-row"><span>${name}: <strong>${n}</strong></span><span>Estimación: ${typeof fine(n, t) === "number" ? `${fine(n, t)} día(s) de salario` : fine(n, t)}</span></div>${n >= 2 ? `<p class="alert">Alerta preventiva: ${name.toLowerCase()} acumuladas en este período.</p>` : ""}`,
+          ([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`,
         )
-        .join(
-          "",
-        )}<p class="muted">Omisión permitida utilizada: ${Math.min(1, s.omissions)} / 1.</p></article>`;
+        .join("")}
+      </dl><p class="muted">La programación incluye fechas futuras del período y excluye feriados libres y situaciones exentas. Las demás cifras consideran solo fechas hasta hoy. Las jornadas excepcionales no cambian la programación permanente. La diferencia compara solo jornadas con ambas horas personales y no constituye una sanción.</p>
+      ${incidents
+        .map(([label, n, type]) => {
+          const value = fine(n, type);
+          return `<p class="estimate">${label}: estimación ${typeof value === "number" ? `${value} día(s) de salario` : value}.</p>`;
+        })
+        .join("")}</details></article>`;
     })
-    .join(
-      "",
-    )}<div class="callout">Estimaciones informativas basadas en el régimen indicado por el usuario. No son decisiones disciplinarias oficiales. Las tardanzas y salidas anticipadas se calculan por separado, sin compensación por horas posteriores.</div>`;
+    .join("");
+  return `<h1>Resumen</h1><div class="period-picker"><button id="period-prev" class="secondary" aria-label="Período anterior">‹</button><div><span>Período administrativo</span><strong>${dateLabel(p.start)} – ${dateLabel(p.end)}</strong></div><button id="period-next" class="secondary" aria-label="Período siguiente">›</button></div>${filters()}<div class="summary-cards">${cards}</div><p class="muted">Sanciones estimadas, no decisiones oficiales. Cada vínculo y tipo se calcula por separado; las horas posteriores no compensan tardanzas. Los días sin registro se revisan, nunca se convierten automáticamente en faltas.</p>`;
 }
 function history() {
   const p = period(filterDate);
@@ -222,7 +265,7 @@ function history() {
   return `<h1>Historial</h1>${filters()}<p>${dateLabel(p.start)} al ${dateLabel(p.end)}</p><p class="muted">Más recientes primero. Cada jornada conserva sus horarios y tolerancias originales.</p>${list.map((r) => recordCard(r.date, r.link)).join("") || '<p class="empty">No hay registros en este período.</p>'}<button id="manual">Ingreso manual</button>`;
 }
 function settings() {
-  return `<h1>Configuración</h1><form id="settings-form"><section class="card"><h2>Horarios</h2><p class="muted">Cambios aplicables a jornadas nuevas. Los registros existentes conservan su horario y tolerancia.</p><label>Inicio del seguimiento<input name="startDate" type="date" value="${config.startDate}" required></label>${config.links.map((l) => `<fieldset><legend>${esc(l.name)}</legend><label>Nombre<input name="name${l.id}" maxlength="80" value="${esc(l.name)}" required></label><label>Día<select name="day${l.id}">${days.map((d, i) => `<option value="${i}" ${l.day === i ? "selected" : ""}>${d}</option>`).join("")}</select></label><div class="filters"><label>Entrada<input type="time" name="start${l.id}" value="${l.start}" required></label><label>Salida<input type="time" name="end${l.id}" value="${l.end}" required></label></div></fieldset>`).join("")}</section><section class="card"><h2>Tolerancias inclusivas</h2><label>Normal (minutos)<input type="number" name="normalTolerance" min="0" max="180" value="${config.normalTolerance}" required></label><label>Lluvia: total de minutos, no adicional<input type="number" name="rainTolerance" min="0" max="180" value="${config.rainTolerance}" required></label></section><section class="card"><h2>Feriados</h2><p>No se descarga un calendario externo. Introduce las fechas oficiales que correspondan. Son libres por defecto para los tres vínculos. En el calendario puedes cambiar una fecha y vínculo a «Feriado trabajado» u otra situación. Los registros ya guardados son excepciones y se conservan.</p><label>Fechas, una por línea (AAAA-MM-DD)<textarea name="holidays" rows="5" placeholder="2026-12-25">${esc(config.holidays.join("\n"))}</textarea></label></section><button type="submit">Guardar configuración</button></form><section class="card"><h2>Reglas de incidencia</h2><p>Una omisión oficial de entrada o salida permitida por vínculo y período. Solo se cuentan omisiones confirmadas en una jornada cerrada, una vez transcurrido su horario de salida.</p><p>Omisiones: 0–1 → 0 días; 2 → 1; 3 → 2; 4 → 3; 5 → 4; más de 5 → revisión normativa.</p><p>Tardanzas y salidas anticipadas, cada tipo por separado: 0–2 → 0 días; 3 → 1; 4 → 2; 5 → 3; 6 → 4; 7 o más → 5 días.</p><p>Solo cuentan incidencias injustificadas. Una jornada sin marcaciones no se convierte en ausencia injustificada. Las jornadas futuras no suman incidencias. La ausencia injustificada se identifica, sin inventar una escala de sanción adicional.</p></section><section class="card"><h2>Respaldo local</h2><p>Exporta regularmente: el navegador puede borrar sus datos. JSON conserva configuración e historial de cambios. CSV sirve para consulta y no para restaurar.</p><div class="actions"><button id="json-export">Exportar JSON</button><button id="csv-export" class="secondary">Exportar CSV</button></div><label>Importar respaldo JSON (hasta 20 MB)<input id="json-import" type="file" accept="application/json,.json"></label><label class="check"><input type="checkbox" id="restore-config">Restaurar también la configuración del respaldo</label><p class="muted">La importación agrega solo jornadas inexistentes; las coincidentes se omiten sin sobrescribirlas. La configuración actual se conserva salvo que elijas restaurarla. No se envían datos a servicios externos.</p></section>`;
+  return `<h1>Configuración</h1><form id="settings-form"><section class="card"><h2>Horarios</h2><p class="muted">Cambios aplicables a jornadas nuevas. Los registros existentes conservan su horario y tolerancia.</p><label>Inicio del seguimiento<input name="startDate" type="date" value="${config.startDate}" required aria-describedby="tracking-help"></label><p id="tracking-help" class="muted">Desde esta fecha se señalan jornadas programadas transcurridas sin registro para revisión. No genera faltas retroactivas, no cambia tus registros ni los períodos anteriores. Puedes cargar jornadas históricas manualmente: se cuentan solo en su período. La programación del período se muestra completa, incluso antes del seguimiento.</p>${config.links.map((l) => `<fieldset><legend>${esc(l.name)}</legend><label>Nombre<input name="name${l.id}" maxlength="80" value="${esc(l.name)}" required></label><label>Día<select name="day${l.id}">${days.map((d, i) => `<option value="${i}" ${l.day === i ? "selected" : ""}>${d}</option>`).join("")}</select></label><div class="filters"><label>Entrada<input type="time" name="start${l.id}" value="${l.start}" required></label><label>Salida<input type="time" name="end${l.id}" value="${l.end}" required></label></div></fieldset>`).join("")}</section><section class="card"><h2>Tolerancias inclusivas</h2><label>Normal (minutos)<input type="number" name="normalTolerance" min="0" max="180" value="${config.normalTolerance}" required></label><label>Lluvia: total de minutos, no adicional<input type="number" name="rainTolerance" min="0" max="180" value="${config.rainTolerance}" required></label></section><section class="card"><h2>Feriados</h2><p>No se descarga un calendario externo. Introduce las fechas oficiales que correspondan. Son libres por defecto para los tres vínculos. En el calendario puedes cambiar una fecha y vínculo a «Feriado trabajado» u otra situación. Los registros ya guardados son excepciones y se conservan.</p><label>Fechas, una por línea (AAAA-MM-DD)<textarea name="holidays" rows="5" placeholder="2026-12-25">${esc(config.holidays.join("\n"))}</textarea></label></section><button type="submit">Guardar configuración</button></form><section class="card"><h2>Reglas de incidencia</h2><p>Una omisión oficial de entrada o salida permitida por vínculo y período. Solo se cuentan omisiones confirmadas en una jornada cerrada, una vez transcurrido su horario de salida.</p><p>Omisiones: 0–1 → 0 días; 2 → 1; 3 → 2; 4 → 3; 5 → 4; más de 5 → revisión normativa.</p><p>Tardanzas y salidas anticipadas, cada tipo por separado: 0–2 → 0 días; 3 → 1; 4 → 2; 5 → 3; 6 → 4; 7 o más → 5 días.</p><p>Solo cuentan incidencias injustificadas. Una jornada sin marcaciones no se convierte en ausencia injustificada. Las jornadas futuras no suman incidencias. La ausencia injustificada se identifica, sin inventar una escala de sanción adicional.</p></section><section class="card"><h2>Respaldo local</h2><p>Exporta regularmente: el navegador puede borrar sus datos. JSON conserva configuración e historial de cambios. CSV sirve para consulta y no para restaurar.</p><div class="actions"><button id="json-export">Exportar JSON</button><button id="csv-export" class="secondary">Exportar CSV</button></div><label>Importar respaldo JSON (hasta 20 MB)<input id="json-import" type="file" accept="application/json,.json"></label><label class="check"><input type="checkbox" id="restore-config">Restaurar también la configuración del respaldo</label><p class="muted">La importación agrega solo jornadas inexistentes; las coincidentes se omiten sin sobrescribirlas. La configuración actual se conserva salvo que elijas restaurarla. No se envían datos a servicios externos.</p></section>`;
 }
 function render() {
   $("#view").innerHTML = { home, calendar, summary, history, settings }[
@@ -239,6 +282,29 @@ function render() {
   bind();
 }
 function bind() {
+  $("#calendar-link")?.addEventListener("change", (e) => {
+    calendarLink = e.target.value;
+    render();
+  });
+  $("#exceptional")?.addEventListener("click", () => {
+    $("#exceptional-picker").hidden = false;
+    $("#exceptional-link").focus();
+  });
+  $("#open-exceptional")?.addEventListener("click", () =>
+    openEditor(selectedDate, $("#exceptional-link").value),
+  );
+  for (const [id, delta] of [
+    ["period-prev", -1],
+    ["period-next", 1],
+  ]) {
+    $("#" + id)?.addEventListener("click", () => {
+      const d = parseDate(period(filterDate).start);
+      d.setMonth(d.getMonth() + delta);
+      filterDate = localDate(d);
+      render();
+    });
+  }
+
   document
     .querySelectorAll("[data-edit]")
     .forEach(

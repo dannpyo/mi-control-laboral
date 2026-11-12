@@ -56,11 +56,30 @@ const baseURL =
   await page.getByRole("button", { name: "Resumen", exact: true }).click();
   await page.locator("#filter-date").fill("2026-11-12");
   let cards = page.locator(".card");
-  assert.match(await cards.first().innerText(), /Tardanzas: 1/);
-  assert.match(await cards.first().innerText(), /Omisiones oficiales: 1/);
-  assert.match(await cards.nth(1).innerText(), /Tardanzas: 0/);
+  assert.equal(
+    await cards.first().getByLabel("Tardanzas: 1", { exact: true }).count(),
+    1,
+  );
+  assert.equal(
+    await cards
+      .first()
+      .getByLabel("Omisiones oficiales: 1", { exact: true })
+      .count(),
+    1,
+  );
+  assert.equal(
+    await cards.nth(1).getByLabel("Tardanzas: 0", { exact: true }).count(),
+    1,
+  );
   await page.locator("#filter-date").fill("2026-11-16");
-  assert.match(await page.locator(".card").first().innerText(), /Tardanzas: 0/);
+  assert.equal(
+    await page
+      .locator(".card")
+      .first()
+      .getByLabel("Tardanzas: 0", { exact: true })
+      .count(),
+    1,
+  );
   await page.locator("#filter-date").fill("2026-11-12");
   await page.getByRole("button", { name: "Historial", exact: true }).click();
   await page
