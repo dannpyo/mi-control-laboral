@@ -49,8 +49,8 @@ export function blank(date, link, config) {
     officialEntry: "pending",
     officialExit: "pending",
     rain: false,
-    lateState: "pending",
-    earlyState: "pending",
+    lateState: "unjustified",
+    earlyState: "unjustified",
     notes: "",
     closed: false,
     schedule: {
@@ -94,8 +94,14 @@ export function assessment(r, config, now = new Date()) {
     future,
     late: countable && late,
     early: countable && early,
-    lateCount: countable && late && r.lateState === "unjustified" ? 1 : 0,
-    earlyCount: countable && early && r.earlyState === "unjustified" ? 1 : 0,
+    // Compatibilidad sin reescribir datos: solo "justified" excluye del cómputo.
+    // El antiguo "pending" equivale a no justificada bajo la nueva regla.
+    lateJustified: countable && late && r.lateState === "justified",
+    earlyJustified: countable && early && r.earlyState === "justified",
+    lateMinutes: countable && late ? minutes(r.entry) - minutes(s.start) : 0,
+    earlyMinutes: countable && early ? minutes(s.end) - minutes(r.exit) : 0,
+    lateCount: countable && late && r.lateState !== "justified" ? 1 : 0,
+    earlyCount: countable && early && r.earlyState !== "justified" ? 1 : 0,
     omissions:
       countable && elapsed && r.closed
         ? Number(r.officialEntry === "missing") +
@@ -105,9 +111,7 @@ export function assessment(r, config, now = new Date()) {
       !future &&
       (r.type === "pending" ||
         (!exempt &&
-          ((late && r.lateState === "pending") ||
-            (early && r.earlyState === "pending") ||
-            !r.closed ||
+          (!r.closed ||
             r.officialEntry === "pending" ||
             r.officialExit === "pending"))),
     workedMinutes:
@@ -174,6 +178,10 @@ export function stats(records, config, link, p, now = new Date()) {
     saved: 0,
     late: 0,
     early: 0,
+    lateDetected: 0,
+    lateJustified: 0,
+    earlyDetected: 0,
+    earlyJustified: 0,
     omissions: 0,
     pending: 0,
     personalMinutes: 0,
@@ -203,6 +211,10 @@ export function stats(records, config, link, p, now = new Date()) {
           minutes(r.schedule.end) - minutes(r.schedule.start);
       } else out.incomplete++;
     }
+    out.lateDetected += Number(a.late);
+    out.lateJustified += Number(a.lateJustified);
+    out.earlyDetected += Number(a.early);
+    out.earlyJustified += Number(a.earlyJustified);
     out.late += a.lateCount;
     out.early += a.earlyCount;
     out.omissions += a.omissions;

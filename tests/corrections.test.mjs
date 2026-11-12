@@ -95,9 +95,12 @@ test("leyenda: verde requiere ambas horas, cierre y estados oficiales; situacion
     "review",
   );
 });
-test("rojo solo para incidencias injustificadas confirmadas, futuro nunca rojo", () => {
+test("rojo para incidencia no justificada automáticamente; futuro nunca rojo", () => {
   const r = make(undefined, undefined, { ...complete, entry: "08:00" });
-  assert.equal(calendarState({ ...r, lateState: "pending" }, c, now), "review");
+  assert.equal(
+    calendarState({ ...r, lateState: "pending" }, c, now),
+    "incident",
+  );
   assert.equal(
     calendarState({ ...r, lateState: "justified" }, c, now),
     "validated",

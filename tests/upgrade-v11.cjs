@@ -62,7 +62,12 @@ const baselineVersion = process.env.UPGRADE_VERSION || "V1.0";
   const context = await browser.newContext();
   let page = await context.newPage();
   await page.goto(url);
-  await page.getByRole("heading", { name: "Tu jornada, a mano." }).waitFor();
+  await page
+    .getByRole("heading", {
+      name: baselineVersion === "V2.0" ? "Inicio" : "Tu jornada, a mano.",
+      exact: true,
+    })
+    .waitFor();
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
   await page.waitForFunction(() => !!navigator.serviceWorker.controller);
@@ -88,7 +93,7 @@ const baselineVersion = process.env.UPGRADE_VERSION || "V1.0";
           earlyState: "justified",
         },
       ],
-      ["2026-11-05", "2", { entry: "07:40" }],
+      ["2026-11-05", "2", { entry: "09:30", lateState: "pending" }],
       ["2026-11-08", "3", { type: "vacation" }],
     ])
       await db.saveRecord(
@@ -116,17 +121,34 @@ const baselineVersion = process.env.UPGRADE_VERSION || "V1.0";
   await page.goto(url);
   await page.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
   assert.equal(await page.locator(".version").innerText(), "V2.0");
+  await page.waitForFunction(async () => {
+    const registration = await navigator.serviceWorker.getRegistration();
+    const keys = await caches.keys();
+    return (
+      !registration.waiting &&
+      registration.active?.state === "activated" &&
+      keys.some((key) => key.endsWith(":v2.0.1"))
+    );
+  });
+  await page.reload();
+  await page.getByRole("heading", { name: "Inicio", exact: true }).waitFor();
   const current = await page.evaluate(async () => {
     const db = await import("./js/storage/db.js");
     return {
       records: await db.getRecords(),
       config: await db.getConfig(),
       version: (await db.openDB()).version,
+      legacyCount: (await import("./js/modules/domain.js")).assessment(
+        (await db.getRecords()).find((r) => r.link === "2"),
+        await db.getConfig(),
+        new Date("2026-11-15T21:00:00"),
+      ).lateCount,
     };
   });
   assert.deepEqual(current.records, old.records);
   assert.deepEqual(current.config, old.config);
   assert.equal(current.version, 1);
+  assert.equal(current.legacyCount, 1);
   // Importar el respaldo anterior sobre los datos existentes no los sobrescribe.
   const result = await page.evaluate(
     async (backup) =>

@@ -25,7 +25,7 @@ Se utiliza la **hora local del dispositivo**, tanto para el reloj como para fech
 - V1: miércoles 07:30–19:30; V2: jueves 07:30–19:30; V3: domingo 07:00–19:00. Configuración y contadores independientes.
 - Período del 16 al 15 inclusive. El cambio de período no elimina datos.
 - Tolerancia normal: 15 minutos inclusive. Lluvia: 60 minutos **totales** inclusive, activados por jornada. 07:45/08:30 son válidas; 07:46/08:31 corresponden a tardanza, respectivamente.
-- Cualquier salida anterior a la hora prevista requiere clasificación. Solo las tardanzas/salidas injustificadas suman su contador; las justificadas se excluyen y las pendientes se identifican para revisar. No se compensan tardanzas con horas posteriores.
+- Cualquier salida anterior a la hora prevista requiere clasificación. Las tardanzas y salidas anticipadas se detectan y contabilizan automáticamente salvo que se marque su casilla de justificación. La casilla aparece solo si hay una incidencia detectada; al desmarcarla vuelve a contar. No se exige seleccionar «Injustificada». El detalle distingue detectadas, justificadas y computables y conserva las justificadas en el historial. El retraso se expresa en minutos desde el horario previsto, no desde el fin de la tolerancia. No se compensan tardanzas con horas posteriores.
 - Una omisión oficial permitida por vínculo y período. Las horas personales vacías no prueban omisión oficial ni ausencia. Una omisión se confirma manualmente en Más opciones y cuenta con jornada cerrada una vez transcurrido su horario de salida.
 - Omisiones: 0–1 → 0 días; 2 → 1; 3 → 2; 4 → 3; 5 → 4; más de 5 → revisión normativa.
 - Tardanzas y salidas anticipadas, **por separado**: 0–2 → 0 días; 3 → 1; 4 → 2; 5 → 3; 6 → 4; 7 o más → 5 días de salario.
@@ -37,7 +37,7 @@ La leyenda del calendario conserva la distinción entre completa/validada, pendi
 
 ### Datos, compatibilidad y respaldos
 
-La versión 2.0 **no cambia** `js/storage/db.js`, las reglas de `domain.js`, el nombre `mi-control-laboral`, IndexedDB versión 1, sus almacenes (`records`, `settings`), sus claves ni el origen de la aplicación. No hay migraciones, reinicios ni reescrituras automáticas de registros. Las correcciones explícitas continúan dejando auditoría anterior/posterior y control de revisión entre pestañas.
+La corrección de incidencias automáticas mantiene `js/storage/db.js`, los horarios, tolerancias y escalas normativas. No cambia el nombre `mi-control-laboral`, IndexedDB versión 1, sus almacenes (`records`, `settings`), sus claves ni el origen de la aplicación. No hay migraciones de estructura, reinicios ni reescrituras automáticas de registros. Las justificaciones heredadas se interpretan al leer: `justified` conserva la justificación; `pending` y `unjustified` cuentan si se detecta incidencia. Los valores originales y su auditoría permanecen intactos; una edición explícita guarda las casillas usando los campos anteriores. Los incompletos se muestran como «Falta entrada», «Falta salida» o «Sin registrar», sin omisión ni ausencia automática. Las correcciones explícitas continúan dejando auditoría anterior/posterior y control de revisión entre pestañas.
 
 En Configuración:
 
@@ -57,9 +57,10 @@ js/modules/domain.js          Reglas, estadísticas y validaciones conservadas
 js/modules/presentation.js    Reloj local, vínculo automático y preferencia visual
 js/storage/db.js              IndexedDB e importación conservados
 manifest.webmanifest          Instalación PWA
-sw.js                         Caché v2.0.0, solo recursos estáticos
+sw.js                         Caché v2.0.1, solo recursos estáticos
 assets/icons/                 Iconos existentes
 tests/                        Reglas, interfaz, móvil y actualización
+tests/automatic-incidents.*   Ejemplo de 120 min, justificaciones y compatibilidad
 docs/VALIDACION-V2.md          Verificación de esta entrega
 ```
 
@@ -83,6 +84,7 @@ Pruebas de navegador con Playwright/Chromium como herramientas de desarrollo, no
 
 ```sh
 TEST_URL=http://localhost:8000/ node tests/browser.cjs
+TEST_URL=http://localhost:8000/ node tests/automatic-incidents.cjs
 TEST_URL=http://localhost:8000/ node tests/mobile-v11.cjs
 ```
 
@@ -93,10 +95,11 @@ Actualización real en el mismo origen (servidor temporal propio, requiere histo
 ```sh
 node tests/upgrade-v11.cjs
 UPGRADE_BASE=36fa1a4 UPGRADE_VERSION=V1.1 node tests/upgrade-v11.cjs
+UPGRADE_BASE=2cc02dc UPGRADE_VERSION=V2.0 node tests/upgrade-v11.cjs
 node tests/upgrade.cjs
 ```
 
-Verifican respectivamente v1.0 → actual, v1.1 → actual y etapa inicial → actual. Comparan los datos, configuración e historial existentes, compatibilidad JSON y uso offline.
+Verifican respectivamente v1.0 → actual, v1.1 → actual, v2.0 → actual y etapa inicial → actual. Comparan los datos, configuración e historial existentes, compatibilidad JSON y uso offline.
 
 ### Instalación y actualización
 
@@ -104,6 +107,8 @@ La configuración de GitHub Pages no se modifica en esta entrega. Las rutas perm
 
 Para instalar en Android, abrir la URL HTTPS en Chrome y elegir «Instalar aplicación» o «Añadir a pantalla de inicio». La primera carga necesita conexión; tras activar el Service Worker, la app y la edición funcionan offline. En escritorio puede usarse o instalarse desde un navegador compatible.
 
-Al actualizar, abrir con conexión para descargar el nuevo Service Worker, cerrar todas las pestañas/ventanas de la app y volver a abrir. No se fuerza una recarga durante una edición. La caché v2.0.0 conserva juntos HTML, CSS y módulos de la versión activa y nunca contiene registros. Cambiar `VERSION`, los recursos de `SHELL` y sus identificadores `?v=` cuando corresponda en futuras versiones.
+Al actualizar, abrir con conexión para descargar el nuevo Service Worker, cerrar todas las pestañas/ventanas de la app y volver a abrir. No se fuerza una recarga durante una edición. La caché v2.0.1 conserva juntos HTML, CSS y módulos de la versión activa y nunca contiene registros. Cambiar `VERSION`, los recursos de `SHELL` y sus identificadores `?v=` cuando corresponda en futuras versiones.
 
 La instalación y los flujos se prueban en Chromium y con emulación Android; queda pendiente la comprobación de la versión 2.0 en un Android físico.
+
+La corrección puntual de incidencias automáticas y sus pruebas se detallan en `docs/INCIDENCIAS-AUTOMATICAS.md`.
