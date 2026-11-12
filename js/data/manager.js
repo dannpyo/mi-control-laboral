@@ -1,3 +1,4 @@
+import { validateData as validatePrivateData } from "../private/domain.js";
 import * as storage from "../storage/db.js";
 import {
   validateConfig,
@@ -23,12 +24,17 @@ export function supportsDirectoryAccess(env = globalThis) {
 export function backupDocument(snapshot, at = new Date()) {
   validateConfig(snapshot.config);
   snapshot.records.forEach(validateRecord);
+  if (snapshot.privateGuards !== undefined)
+    validatePrivateData(snapshot.privateGuards);
   return {
     format: "mi-control-laboral",
     version: 1,
     exportedAt: at.toISOString(),
     config: snapshot.config,
     records: snapshot.records,
+    ...(snapshot.privateGuards !== undefined
+      ? { privateGuards: snapshot.privateGuards }
+      : {}),
   };
 }
 export function reminderDue(prefs, now = new Date()) {
@@ -125,7 +131,10 @@ export function createBackupManager({
       !manual &&
       (!prefs.enabled ||
         prefs.pausedAfterClear ||
-        snapshot.records.length === 0)
+        (snapshot.records.length === 0 &&
+          !snapshot.privateGuards?.shifts.length &&
+          !snapshot.privateGuards?.userConfigured &&
+          !snapshot.privateGuards?.history.length))
     )
       return { skipped: true };
     if (!supported() || !prefs.handle || !(await permission(prefs.handle))) {
@@ -140,7 +149,11 @@ export function createBackupManager({
       day = localDate(at),
       data = backupDocument(snapshot, at);
     const fingerprint = await digest(
-      JSON.stringify({ config: data.config, records: data.records }),
+      JSON.stringify({
+        config: data.config,
+        records: data.records,
+        privateGuards: data.privateGuards,
+      }),
     );
     if (prefs.groupDaily && prefs.lastFingerprint === fingerprint) {
       // Se vuelve a comprobar el último archivo: no se presume íntegro si fue borrado o cambiado.
@@ -152,7 +165,11 @@ export function createBackupManager({
           parsed.format !== "mi-control-laboral" ||
           parsed.version !== 1 ||
           (await digest(
-            JSON.stringify({ config: parsed.config, records: parsed.records }),
+            JSON.stringify({
+              config: parsed.config,
+              records: parsed.records,
+              privateGuards: parsed.privateGuards,
+            }),
           )) !== fingerprint
         )
           throw Error("Archivo cambiado");

@@ -14,7 +14,7 @@ Aplicación personal de asistencia con interfaz corporativa minimalista. HTML, C
 - **Calendario:** mes y vínculo seleccionables, solo jornadas programadas o realmente guardadas. Tarjetas breves con horas/estado y Editar. «Registrar jornada excepcional» no altera el horario semanal. Permisos, feriados y situaciones especiales se conservan.
 - **Resumen:** período 16–15 y filtro por vínculo. Tardanzas, salidas anticipadas, omisiones, posibles ausencias, saldo de la omisión permitida, «Sin sanciones estimadas» o detalle de las sanciones posibles. «Ver fechas de incidencia» permite consultar y editar las jornadas contadas. No repite estimaciones de cero ni estadísticas secundarias.
 
-La navegación inferior tiene solo Inicio, Calendario y Resumen. El icono de engranaje abre Configuración (horarios, tolerancias, feriados, reglas y respaldos). El icono de apariencia alterna modo oscuro/claro; su preferencia se conserva por origen en `localStorage`, separada de los datos laborales y del respaldo JSON.
+La navegación inferior tiene Inicio, Calendario, Resumen y Guardias privadas (etiqueta breve «Guardias»). El icono de engranaje abre Configuración (horarios, tolerancias, feriados, reglas y respaldos). El icono de apariencia alterna modo oscuro/claro; su preferencia se conserva por origen en `localStorage`, separada de los datos laborales y del respaldo JSON.
 
 ### Hora y zona horaria
 
@@ -51,14 +51,16 @@ Exporta regularmente: el navegador puede borrar su almacenamiento. No subas resp
 ### Estructura
 
 ```text
-index.html                    Cabecera, tres pestañas y diálogo
+index.html                    Cabecera, cuatro pestañas y diálogos
 css/styles.css                Paletas claro/oscuro y diseño móvil
 js/app.js                     Interfaz, marcación, edición, exportación y arranque
 js/modules/domain.js          Reglas, estadísticas y validaciones conservadas
 js/modules/presentation.js    Reloj local, vínculo automático y preferencia visual
-js/storage/db.js              IndexedDB e importación conservados
+js/storage/db.js              IndexedDB e importación transaccional
+js/private/domain.js          Tarifas exactas y períodos privados independientes
+js/private/ui.js              Guardias, editor breve y ajustes de liquidación
 manifest.webmanifest          Instalación PWA
-sw.js                         Caché v2.2.1, solo recursos estáticos
+sw.js                         Caché v3.0.0, solo recursos estáticos
 assets/icons/                 Iconos existentes
 tests/                        Reglas, interfaz, móvil y actualización
 tests/automatic-incidents.*   Ejemplo de 120 min, justificaciones y compatibilidad
@@ -84,6 +86,7 @@ node --test tests/*.test.mjs
 Pruebas de navegador con Playwright/Chromium como herramientas de desarrollo, no dependencias de la PWA (por ejemplo, `npm install --no-save --package-lock=false playwright`). `CHROMIUM_PATH` permite cambiar `/usr/bin/chromium`. Con el servidor activo:
 
 ```sh
+TEST_URL=http://localhost:8000/ node tests/private-guards.cjs
 TEST_URL=http://localhost:8000/ node tests/browser.cjs
 TEST_URL=http://localhost:8000/ node tests/margins.cjs
 TEST_URL=http://localhost:8000/ node tests/mandatory-attendance.cjs
@@ -111,7 +114,7 @@ La configuración de GitHub Pages no se modifica en esta entrega. Las rutas perm
 
 Para instalar en Android, abrir la URL HTTPS en Chrome y elegir «Instalar aplicación» o «Añadir a pantalla de inicio». La primera carga necesita conexión; tras activar el Service Worker, la app y la edición funcionan offline. En escritorio puede usarse o instalarse desde un navegador compatible.
 
-Al actualizar, abrir con conexión para descargar el nuevo Service Worker, cerrar todas las pestañas/ventanas de la app y volver a abrir. No se fuerza una recarga durante una edición. La caché v2.2.1 conserva juntos HTML, CSS y módulos de la versión activa y nunca contiene registros. Cambiar `VERSION`, los recursos de `SHELL` y sus identificadores `?v=` cuando corresponda en futuras versiones.
+Al actualizar, abrir con conexión para descargar el nuevo Service Worker, cerrar todas las pestañas/ventanas de la app y volver a abrir. No se fuerza una recarga durante una edición. La caché v3.0.0 conserva juntos HTML, CSS y módulos de la versión activa y nunca contiene registros. Cambiar `VERSION`, los recursos de `SHELL` y sus identificadores `?v=` cuando corresponda en futuras versiones.
 
 La instalación y los flujos se prueban en Chromium y con emulación Android; queda pendiente la comprobación de la versión 2.0 en un Android físico.
 
@@ -124,7 +127,7 @@ En Configuración → Datos y respaldos puedes seleccionar/cambiar una carpeta, 
 
 Las copias se escriben después de confirmar el guardado laboral, se verifican mediante lectura y tienen nombres únicos. Se pueden agrupar por día y omitir contenido sin cambios. No se eliminan copias históricas ni se guardan handles en el JSON. Un fallo no revierte la jornada.
 
-«Borrar todos los registros» muestra la cantidad, ofrece respaldo previo y exige dos confirmaciones, la segunda escribiendo `BORRAR`. Limpia únicamente jornadas e historiales y conserva configuración, feriados, tema y ajustes de respaldo. Las copias existentes quedan intactas y el automático queda en pausa hasta que se elija Crear respaldo ahora. Una copia del estado vacío requiere decisión explícita; no se genera automáticamente.
+«Borrar todos los registros» muestra la cantidad, ofrece respaldo previo y exige dos confirmaciones, la segunda escribiendo `BORRAR`. Limpia únicamente jornadas e historiales DGVS/HGI; conserva Guardias privadas y su configuración, además de la configuración laboral, feriados, tema y ajustes de respaldo. Las copias existentes quedan intactas y el automático queda en pausa hasta que se elija Crear respaldo ahora. Una copia del estado vacío requiere decisión explícita; no se genera automáticamente.
 
 Detalles de compatibilidad, integridad, conservación, pruebas y limitaciones: [Datos y respaldos](docs/DATOS-Y-RESPALDOS.md).
 
@@ -145,3 +148,14 @@ Resumen incluye «Margen de incidencias», calculado solo con incidencias comput
 Inicio solo advierte cuando hay riesgo inmediato en el vínculo seleccionado. Calendario muestra el aporte de la fecha a su período en la tarjeta de la jornada, sin repetir alertas en celdas. Las justificaciones, excepciones y cambios del período actualizan los márgenes usando los cálculos existentes. No se modifican reglas, datos ni respaldos.
 
 Criterios y pruebas: [Margen de incidencias](docs/MARGEN-DE-INCIDENCIAS.md).
+
+
+### Guardias privadas
+
+Cuarta sección independiente para ingresar entrada/salida y consultar horas e importe bruto estimado por liquidación. Tarifas iniciales: Gs. 44.000/h normal y Gs. 49.500/h desde sábado 07:01 hasta lunes 07:00. Cada guardia conserva sus tarifas; el recálculo retroactivo requiere confirmación.
+
+Los períodos privados predeterminados van del 6 a las 00:00 al siguiente 6 (exclusivo); factura del 10 al 15 del mes de cierre. Límites y ventanas pueden ajustarse individualmente, y el patrón habitual puede cambiarse para períodos futuros conservando el pasado. Una guardia que cruza un cierre se distribuye por minutos sin duplicar su registro.
+
+Los cálculos usan enteros exactos y un reparto de redondeo que conserva el total. IndexedDB mantiene su versión y almacenes. Los nuevos JSON incluyen `privateGuards`; los anteriores conservan las guardias locales. La importación añade sin sobrescribir, con casilla para excluir el módulo privado y rechazo transaccional si los calendarios difieren. Las copias automáticas incluyen ambos módulos. CSV conserva su alcance laboral actual.
+
+Uso, ejemplos obligatorios, criterios de cálculo, importación, pruebas y limitaciones: [Guardias privadas](docs/GUARDIAS-PRIVADAS.md).

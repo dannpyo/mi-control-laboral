@@ -1,3 +1,4 @@
+import { createPrivateUI } from "./private/ui.js";
 import { incidenceMargin } from "./modules/margins.js";
 import { createBackupManager, backupDocument } from "./data/manager.js";
 import { backupControls, createBackupUI } from "./data/ui.js";
@@ -314,10 +315,16 @@ function summary() {
   return `<h1>Resumen</h1><div class="period-picker"><button id="period-prev" class="secondary" aria-label="Período anterior">‹</button><div><span>Período administrativo</span><strong>${dateLabel(p.start)} – ${dateLabel(p.end)}</strong></div><button id="period-next" class="secondary" aria-label="Período siguiente">›</button></div>${filters()}${cards}<p class="regulation-note">Normativa informativa configurada por el usuario, pendiente de verificación institucional. No constituye una decisión disciplinaria oficial.</p>`;
 }
 function settings() {
-  return `<h1>Configuración</h1><form id="settings-form"><details class="card settings-group"><summary>Horarios e inicio del seguimiento</summary><p class="muted">Cambios aplicables a jornadas nuevas. Los registros existentes conservan su horario y tolerancia.</p><label>Inicio del seguimiento<input name="startDate" type="date" value="${config.startDate}" required aria-describedby="tracking-help"></label><p id="tracking-help" class="muted">Desde esta fecha se señalan jornadas programadas transcurridas sin registro para revisión. No genera faltas retroactivas, no cambia tus registros ni los períodos anteriores. Puedes cargar jornadas históricas manualmente: se cuentan solo en su período. La programación del período se muestra completa, incluso antes del seguimiento.</p>${config.links.map((l) => `<fieldset><legend>${esc(displayName(l))}</legend><label>Nombre<input name="name${l.id}" maxlength="80" value="${esc(displayName(l))}" required></label><label>Día<select name="day${l.id}">${days.map((d, i) => `<option value="${i}" ${l.day === i ? "selected" : ""}>${d}</option>`).join("")}</select></label><div class="filters"><label>Entrada<input type="time" name="start${l.id}" value="${l.start}" required></label><label>Salida<input type="time" name="end${l.id}" value="${l.end}" required></label></div></fieldset>`).join("")}</details><details class="card settings-group"><summary>Tolerancias</summary><label>Normal (minutos)<input type="number" name="normalTolerance" min="0" max="180" value="${config.normalTolerance}" required></label><label>Lluvia: total de minutos, no adicional<input type="number" name="rainTolerance" min="0" max="180" value="${config.rainTolerance}" required></label></details><details class="card settings-group"><summary>Feriados</summary><p>No se descarga un calendario externo. Introduce las fechas oficiales que correspondan. Son libres por defecto para los tres vínculos. En el calendario puedes cambiar una fecha y vínculo a «Feriado trabajado» u otra situación. Los registros ya guardados son excepciones y se conservan.</p><label>Fechas, una por línea (AAAA-MM-DD)<textarea name="holidays" rows="5" placeholder="2026-12-25">${esc(config.holidays.join("\n"))}</textarea></label></details><button type="submit">Guardar configuración</button></form><details class="card settings-group"><summary>Reglas de incidencia</summary><p class="muted">Configuración informativa pendiente de verificación institucional.</p><p>Una omisión permitida por vínculo y período. Después de superar la salida prevista, una única marcación genera una omisión automáticamente. Sin marcaciones se muestra Posible ausencia hasta clasificarla.</p><p>Omisiones: 0–1 → 0 días; 2 → 1; 3 → 2; 4 → 3; 5 → 4; más de 5 → revisión normativa.</p><p>Tardanzas y salidas anticipadas, cada tipo por separado: 0–2 → 0 días; 3 → 1; 4 → 2; 5 → 3; 6 → 4; 7 o más → 5 días.</p><p>Las incidencias detectadas cuentan automáticamente salvo que marques su casilla de justificación. Una jornada sin marcaciones no se convierte en ausencia injustificada. Las jornadas futuras no suman incidencias. La ausencia injustificada se identifica, sin inventar una escala de sanción adicional.</p></details><section class="card"><h2>Datos y respaldos</h2>${backupControls()}</section>`;
+  return `<h1>Configuración</h1><form id="settings-form"><details class="card settings-group"><summary>Horarios e inicio del seguimiento</summary><p class="muted">Cambios aplicables a jornadas nuevas. Los registros existentes conservan su horario y tolerancia.</p><label>Inicio del seguimiento<input name="startDate" type="date" value="${config.startDate}" required aria-describedby="tracking-help"></label><p id="tracking-help" class="muted">Desde esta fecha se señalan jornadas programadas transcurridas sin registro para revisión. No genera faltas retroactivas, no cambia tus registros ni los períodos anteriores. Puedes cargar jornadas históricas manualmente: se cuentan solo en su período. La programación del período se muestra completa, incluso antes del seguimiento.</p>${config.links.map((l) => `<fieldset><legend>${esc(displayName(l))}</legend><label>Nombre<input name="name${l.id}" maxlength="80" value="${esc(displayName(l))}" required></label><label>Día<select name="day${l.id}">${days.map((d, i) => `<option value="${i}" ${l.day === i ? "selected" : ""}>${d}</option>`).join("")}</select></label><div class="filters"><label>Entrada<input type="time" name="start${l.id}" value="${l.start}" required></label><label>Salida<input type="time" name="end${l.id}" value="${l.end}" required></label></div></fieldset>`).join("")}</details><details class="card settings-group"><summary>Tolerancias</summary><label>Normal (minutos)<input type="number" name="normalTolerance" min="0" max="180" value="${config.normalTolerance}" required></label><label>Lluvia: total de minutos, no adicional<input type="number" name="rainTolerance" min="0" max="180" value="${config.rainTolerance}" required></label></details><details class="card settings-group"><summary>Feriados</summary><p>No se descarga un calendario externo. Introduce las fechas oficiales que correspondan. Son libres por defecto para los tres vínculos. En el calendario puedes cambiar una fecha y vínculo a «Feriado trabajado» u otra situación. Los registros ya guardados son excepciones y se conservan.</p><label>Fechas, una por línea (AAAA-MM-DD)<textarea name="holidays" rows="5" placeholder="2026-12-25">${esc(config.holidays.join("\n"))}</textarea></label></details><button type="submit">Guardar configuración</button></form><details class="card settings-group"><summary>Reglas de incidencia</summary><p class="muted">Configuración informativa pendiente de verificación institucional.</p><p>Una omisión permitida por vínculo y período. Después de superar la salida prevista, una única marcación genera una omisión automáticamente. Sin marcaciones se muestra Posible ausencia hasta clasificarla.</p><p>Omisiones: 0–1 → 0 días; 2 → 1; 3 → 2; 4 → 3; 5 → 4; más de 5 → revisión normativa.</p><p>Tardanzas y salidas anticipadas, cada tipo por separado: 0–2 → 0 días; 3 → 1; 4 → 2; 5 → 3; 6 → 4; 7 o más → 5 días.</p><p>Las incidencias detectadas cuentan automáticamente salvo que marques su casilla de justificación. Una jornada sin marcaciones no se convierte en ausencia injustificada. Las jornadas futuras no suman incidencias. La ausencia injustificada se identifica, sin inventar una escala de sanción adicional.</p></details><section class="card"><h2>Datos y respaldos</h2>${backupControls()}</section><div id="private-settings-root"></div>`;
 }
 function render() {
-  $("#view").innerHTML = { home, calendar, summary, settings }[section]();
+  $("#view").innerHTML = {
+    home,
+    calendar,
+    summary,
+    settings,
+    private: () => privateUI.rootMarkup(),
+  }[section]();
   document.querySelectorAll("[data-section]").forEach((b) => {
     b.disabled = false;
     b.classList.toggle("active", b.dataset.section === section);
@@ -327,9 +334,11 @@ function render() {
     );
   });
   bind();
+  if (section === "private") void privateUI.mount();
   if (section === "settings") {
     backupUI.refresh();
     backupUI.bindClear();
+    void privateUI.mountSettings();
   }
 }
 function bind() {
@@ -438,13 +447,18 @@ function bind() {
           throw Error("El archivo supera 20 MB");
         const data = JSON.parse(await file.text());
         const restore = $("#restore-config").checked;
-        const result = await importBackup(data, restore);
+        const result = await importBackup(
+          data,
+          restore,
+          $("#import-private").checked,
+        );
         if (restore) config = data.config;
         records = await getRecords();
-        if (result.added || restore) void backupUI.automatic();
+        if (result.added || restore || result.privateAdded !== undefined)
+          void backupUI.automatic();
         render();
         notice(
-          `Respaldo importado: ${result.added} nuevas; ${result.skipped} coincidentes conservadas.`,
+          `Respaldo importado: ${result.added} nuevas; ${result.skipped} coincidentes conservadas.${result.privateAdded !== undefined ? ` Guardias privadas: ${result.privateAdded} incorporadas, ${result.privateSkipped} conservadas.` : data.privateGuards ? " Guardias privadas locales conservadas sin importar." : ""}`,
         );
       });
   });
@@ -659,6 +673,12 @@ const backupUI = createBackupUI(backupManager, {
     await backupUI.refresh();
   },
 });
+const privateUI = createPrivateUI({
+  notice,
+  onChanged: () => {
+    void backupUI.automatic();
+  },
+});
 document.querySelectorAll("[data-section]").forEach(
   (b) =>
     (b.onclick = () => {
@@ -727,7 +747,13 @@ async function init() {
 }
 window.addEventListener("focus", () => {
   if (section === "settings") void backupUI.refresh();
-  if (!busy && !$("#editor").open && config && !["settings"].includes(section))
+  if (
+    !busy &&
+    !$("#editor").open &&
+    !privateUI.isEditing() &&
+    config &&
+    !["settings"].includes(section)
+  )
     run(async () => {
       config = (await getConfig()) || config;
       records = await getRecords();
@@ -761,6 +787,7 @@ setInterval(() => {
     phase !== lastPhase &&
     !busy &&
     !$("#editor").open &&
+    !privateUI.isEditing() &&
     section !== "settings"
   ) {
     lastPhase = phase;
@@ -771,6 +798,7 @@ setInterval(() => {
     today !== lastDay &&
     !busy &&
     !$("#editor").open &&
+    !privateUI.isEditing() &&
     section !== "settings"
   ) {
     if (filterDate === lastDay) filterDate = today;

@@ -7,6 +7,7 @@ import {
   backupDocument,
 } from "../js/data/manager.js";
 import { defaults, blank } from "../js/modules/domain.js";
+import { initialData, upsertShift, removeShift } from "../js/private/domain.js";
 import { backupDefaults } from "../js/storage/db.js";
 function fixture() {
   const root = { files: new Map(), dirs: new Map() },
@@ -69,6 +70,7 @@ function fixture() {
     revision = 1,
     rows = [{ ...blank("2026-11-12", "2", defaults()), entry: "07:30" }];
   const config = defaults();
+  let privateGuards;
   const db = {
     getBackupSettings: async () => ({ ...prefs }),
     getSnapshot: async () => ({
@@ -76,6 +78,7 @@ function fixture() {
       config: structuredClone(config),
       revision,
       backup: { ...prefs },
+      privateGuards,
     }),
     updateBackupSettings: async (patch) => (prefs = { ...prefs, ...patch }),
     setBackupDestination: async (h) => {
@@ -147,6 +150,11 @@ function fixture() {
     change() {
       revision++;
       rows[0].exit = "19:30";
+    },
+    privateOnly(data) {
+      rows = [];
+      privateGuards = structuredClone(data);
+      revision++;
     },
     clear() {
       rows = [];
@@ -334,4 +342,38 @@ test("deduplicación vuelve a verificar y preserva un archivo alterado por fuera
   assert.equal(result.verified, true);
   assert.equal(day.files.get(parts[2]), "Alterado externamente");
   assert.equal(f.allFiles().length, 2);
+});
+
+test("respaldo automático solo privado: verifica JSON, cambios y copias históricas sin jornadas DGVS/HGI", async () => {
+  const f = fixture();
+  let data = upsertShift(initialData("2026-11-12T12:00"), {
+    start: "2026-12-05T19:00",
+    end: "2026-12-06T07:00",
+  });
+  f.privateOnly(data);
+  await f.manager.setGrouping(true);
+  assert.equal((await f.manager.createNow()).verified, true);
+  const first = f.allFiles()[0],
+    parsed = JSON.parse(first[1]);
+  assert.equal(parsed.records.length, 0);
+  assert.deepEqual(parsed.privateGuards, JSON.parse(JSON.stringify(data)));
+  assert.equal((await f.manager.createNow()).reused, true);
+  data = upsertShift(data, {
+    id: data.shifts[0].id,
+    start: data.shifts[0].start,
+    end: "2026-12-06T08:00",
+  });
+  f.privateOnly(data);
+  assert.equal((await f.manager.createNow()).verified, true);
+  assert.equal(f.allFiles().length, 2);
+  assert.deepEqual(f.allFiles()[0], first);
+  assert.equal(
+    JSON.parse(f.allFiles()[1][1]).privateGuards.shifts[0].end,
+    "2026-12-06T08:00",
+  );
+  f.privateOnly(removeShift(data, data.shifts[0].id));
+  assert.equal((await f.manager.createNow()).verified, true);
+  assert.equal(f.allFiles().length, 3);
+  assert.equal(JSON.parse(f.allFiles()[2][1]).privateGuards.shifts.length, 0);
+  assert.ok(JSON.parse(f.allFiles()[2][1]).privateGuards.history.length);
 });

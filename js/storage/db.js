@@ -1,3 +1,7 @@
+import {
+  validateData as validatePrivateData,
+  mergePrivateData,
+} from "../private/domain.js";
 import { validateConfig, validateRecord } from "../modules/domain.js";
 let database;
 export function openDB() {
@@ -91,7 +95,11 @@ export async function saveRecord(
     };
   });
 }
-export async function importBackup(data, restoreConfig = false) {
+export async function importBackup(
+  data,
+  restoreConfig = false,
+  includePrivate = true,
+) {
   if (
     !data ||
     data.format !== "mi-control-laboral" ||
@@ -108,12 +116,36 @@ export async function importBackup(data, restoreConfig = false) {
       throw Error("El respaldo contiene registros duplicados");
     seen.add(r.id);
   }
+  if (data.privateGuards !== undefined) validatePrivateData(data.privateGuards);
   let added = 0,
-    skipped = 0;
+    skipped = 0,
+    privateResult;
+
   await transaction(["records", "settings"], "readwrite", (tx) => {
     if (restoreConfig) {
       tx.objectStore("settings").put(data.config, "config");
       bumpRevision(tx);
+    }
+    if (data.privateGuards !== undefined && includePrivate) {
+      const settings = tx.objectStore("settings"),
+        q = settings.get("privateGuards");
+      q.onsuccess = () => {
+        try {
+          const merged = mergePrivateData(q.result, data.privateGuards);
+          settings.put(
+            { ...merged.data, revision: (q.result?.revision || 0) + 1 },
+            "privateGuards",
+          );
+          privateResult = {
+            privateAdded: merged.added,
+            privateSkipped: merged.skipped,
+          };
+          bumpRevision(tx);
+        } catch (error) {
+          tx.customError = error;
+          tx.abort();
+        }
+      };
     }
     const store = tx.objectStore("records");
     for (const r of data.records) {
@@ -143,7 +175,7 @@ export async function importBackup(data, restoreConfig = false) {
       };
     }
   });
-  return { added, skipped };
+  return { added, skipped, ...privateResult };
 }
 
 // Metadatos fuera de config y del formato JSON; no se cambia la versión ni almacenes.
@@ -220,12 +252,14 @@ export async function getSnapshot() {
       rows = tx.objectStore("records").getAll(),
       config = settings.get("config"),
       revision = settings.get("dataRevision"),
-      backup = settings.get("backupSettings");
+      backup = settings.get("backupSettings"),
+      privateGuards = settings.get("privateGuards");
     return () => ({
       records: rows.result,
       config: config.result,
       revision: revision.result || 0,
       backup: backup.result || backupDefaults(),
+      privateGuards: privateGuards.result,
     });
   });
 }
@@ -290,5 +324,34 @@ export async function clearAllRecords(expectedRevision, expectedCount) {
         "backupSettings",
       );
     };
+  });
+}
+
+// Módulo privado separado en settings: mismo origen, versión y almacenes existentes.
+export async function getPrivateGuards() {
+  return transaction(["settings"], "readonly", (tx) => {
+    const q = tx.objectStore("settings").get("privateGuards");
+    return () => q.result;
+  });
+}
+export async function savePrivateGuards(data, expectedRevision) {
+  validatePrivateData(data);
+  return transaction(["settings"], "readwrite", (tx) => {
+    const settings = tx.objectStore("settings"),
+      q = settings.get("privateGuards");
+    let next;
+    q.onsuccess = () => {
+      if ((q.result?.revision || 0) !== expectedRevision) {
+        tx.customError = Error(
+          "Guardias privadas cambió en otra pestaña. Cierra el formulario y vuelve a abrirlo.",
+        );
+        tx.abort();
+        return;
+      }
+      next = { ...data, revision: (q.result?.revision || 0) + 1 };
+      settings.put(next, "privateGuards");
+      bumpRevision(tx);
+    };
+    return () => next;
   });
 }
